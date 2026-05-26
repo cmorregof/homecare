@@ -8,7 +8,7 @@ import { VitalCard } from "@/components/vitals/vital-card";
 import { requireRole } from "@/lib/auth";
 import { getPatientDashboardData } from "@/lib/data";
 
-const TELEGRAM_URL = process.env.NEXT_PUBLIC_TELEGRAM_BOT_URL ?? "https://t.me/HomecareCCVBot";
+const TELEGRAM_URL = process.env.NEXT_PUBLIC_TELEGRAM_BOT_URL ?? "https://t.me/project918_homecare_bot";
 
 export default async function PatientDashboardPage() {
   await requireRole("patient");

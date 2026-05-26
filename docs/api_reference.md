@@ -107,6 +107,10 @@ Response:
 
 ## Telegram
 
+Bot público: [project918_homecare_bot](https://t.me/project918_homecare_bot).
+
+El token HTTP API de Telegram debe configurarse como `TELEGRAM_BOT_TOKEN` en `backend/.env` y en Railway. No debe versionarse en Git.
+
 ### POST `/webhook`
 
 Recibe updates enviados por Telegram cuando el bot está configurado en modo webhook. Requiere `TELEGRAM_BOT_TOKEN`.
