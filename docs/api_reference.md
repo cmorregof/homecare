@@ -9,6 +9,8 @@ Base local: `http://localhost:8000`
 | GET | `/health` | Health check del backend |
 | GET | `/` | Metadatos básicos del servicio |
 | POST | `/agents/vital-report` | Ejecuta flujo Enfermera → ML → Médico → respuesta |
+| POST | `/ml/predict` | Predicción de riesgo en tiempo real |
+| GET | `/models` | Resultados comparativos del entrenamiento ML |
 
 ## Endpoints planeados
 
@@ -38,6 +40,50 @@ Request:
   "source": "telegram"
 }
 ```
+
+## ML
+
+### POST `/ml/predict`
+
+Request:
+
+```json
+{
+  "patient_id": "uuid",
+  "vital_sign_id": "uuid",
+  "features": {
+    "age": 72,
+    "systolic_bp": 165,
+    "diastolic_bp": 95,
+    "heart_rate": 88,
+    "oxygen_saturation": 96,
+    "glucose": 130,
+    "stroke_history": true,
+    "hypertension_history": true
+  }
+}
+```
+
+Response:
+
+```json
+{
+  "risk_level": "high",
+  "risk_probability": 0.78,
+  "probabilities": {
+    "low": 0.05,
+    "moderate": 0.17,
+    "high": 0.78,
+    "critical": 0.0
+  },
+  "model_used": "lightgbm",
+  "shap_values": {},
+  "top_risk_factors": [],
+  "confidence_score": 0.61
+}
+```
+
+Si `backend/ml/models/best_model.pkl` no existe, el endpoint usa reglas clínicas de seguridad como fallback y marca `model_used = clinical_rules_fallback`.
 
 Response:
 

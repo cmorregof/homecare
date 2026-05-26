@@ -24,3 +24,10 @@
 | `pulse_pressure` | Presión de pulso | derivada | sistólica - diastólica |
 | `map` | Presión arterial media | derivada | diastólica + (pulso/3) |
 | `bmi_category` | Categoría de IMC | derivada | 0=bajo, 1=normal, 2=sobrepeso, 3=obeso |
+
+## Artefactos Sprint 2
+
+- `data/etl/unify_datasets.py`: unifica Stroke, Cardiovascular y Heart Failure a estas 22 features.
+- `backend/ml/preprocessing.py`: normaliza payloads de predicción y calcula variables derivadas.
+- `backend/ml/train.py`: entrena los 10 modelos definidos y selecciona por `f1_macro`.
+- `backend/ml/predict.py`: carga `best_model.pkl` una vez y responde el contrato de predicción en tiempo real.

@@ -140,6 +140,29 @@ class AgentsFlowTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(prediction["risk_level"], "critical")
 
+    async def test_ml_endpoint_contract_is_available(self):
+        from fastapi.testclient import TestClient
+        from main import app
+
+        client = TestClient(app)
+        response = client.post(
+            "/ml/predict",
+            json={
+                "patient_id": "patient-1",
+                "vital_sign_id": "vital-1",
+                "features": {
+                    "systolic_bp": 182,
+                    "diastolic_bp": 95,
+                    "heart_rate": 88,
+                },
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertIn(body["risk_level"], {"low", "moderate", "high", "critical"})
+        self.assertIn("probabilities", body)
+        self.assertIn("top_risk_factors", body)
+
 
 if __name__ == "__main__":
     unittest.main()

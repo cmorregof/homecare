@@ -246,6 +246,22 @@ pip install -r requirements.txt
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
+Para preparar ML con datasets reales:
+
+```bash
+PYTHONPATH=backend python data/etl/unify_datasets.py
+cd backend
+PYTHONPATH=. python -m ml.train
+```
+
+Para validar localmente sin los CSV de Kaggle:
+
+```bash
+PYTHONPATH=backend python data/etl/unify_datasets.py --allow-synthetic
+cd backend
+PYTHONPATH=. python -m ml.train --models logistic_regression decision_tree
+```
+
 ## Variables de entorno
 
 Las variables están documentadas en `.env.example`. Nunca se deben versionar archivos `.env`, `.env.local` ni llaves privadas.
