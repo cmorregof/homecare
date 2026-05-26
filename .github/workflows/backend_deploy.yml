@@ -1,21 +1,79 @@
-name: Backend Deploy
+name: Backend CI/CD
 
 on:
   push:
     branches: [main]
     paths:
       - "backend/**"
+      - "scripts/**"
+      - ".github/workflows/backend_deploy.yml"
+  pull_request:
+    paths:
+      - "backend/**"
+      - "scripts/**"
       - ".github/workflows/backend_deploy.yml"
 
 jobs:
   backend-check:
     runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: backend
+      ML_MODEL_PATH: backend/ml/models/best_model.pkl
+      ENVIRONMENT: test
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
-      - name: Syntax check
-        run: python -m compileall backend
-      - name: Railway deploy placeholder
-        run: echo "Configure Railway deployment token in Sprint 6."
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install backend dependencies
+        run: python -m pip install -r backend/requirements.txt
+
+      - name: Compile backend
+        run: python -m compileall backend data/etl
+
+      - name: Run backend tests
+        run: python -m unittest discover -s backend/tests -v
+
+      - name: Validate deployment environment template
+        run: python scripts/check_env.py --target backend --template backend/.env.example --allow-placeholder
+
+      - name: Build backend Docker image
+        run: docker build -t homecare-ccv-backend ./backend
+
+  railway-deploy:
+    needs: backend-check
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+      RAILWAY_SERVICE_NAME: ${{ vars.RAILWAY_SERVICE_NAME }}
+      BACKEND_PUBLIC_URL: ${{ vars.BACKEND_PUBLIC_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        if: env.RAILWAY_TOKEN != ''
+        with:
+          node-version: "20"
+
+      - name: Deploy backend to Railway
+        if: env.RAILWAY_TOKEN != ''
+        run: |
+          SERVICE_NAME="${RAILWAY_SERVICE_NAME:-backend}"
+          npx @railway/cli@latest up --service "$SERVICE_NAME" --detach
+
+      - name: Configure Telegram webhook
+        if: env.RAILWAY_TOKEN != '' && env.BACKEND_PUBLIC_URL != ''
+        run: |
+          curl -fsS -X POST "${BACKEND_PUBLIC_URL%/}/telegram/webhook/setup"
+
+      - name: Skip Railway deploy when token is missing
+        if: env.RAILWAY_TOKEN == ''
+        run: echo "RAILWAY_TOKEN is not configured; backend deploy skipped after checks."

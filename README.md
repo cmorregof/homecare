@@ -271,15 +271,18 @@ Las variables están documentadas en `.env.example`. Nunca se deben versionar ar
 Backend en Railway:
 
 1. Conectar el repositorio.
-2. Usar `backend/Dockerfile`.
+2. Usar `backend/` como root del servicio.
 3. Configurar variables de entorno.
-4. Exponer `PORT=8000` y configurar el webhook de Telegram.
+4. El contenedor usa `PORT` automaticamente y expone `/health`.
+5. Configurar el webhook de Telegram con `POST /telegram/webhook/setup`.
 
 Frontend en Vercel:
 
 1. Conectar el repositorio.
 2. Seleccionar `frontend/` como root directory.
-3. Configurar `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` y `NEXT_PUBLIC_API_URL`.
+3. Configurar `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_API_URL` y `NEXT_PUBLIC_TELEGRAM_BOT_URL`.
+
+La guia completa esta en `docs/despliegue.md` y la operacion diaria en `docs/operacion_produccion.md`.
 
 ## Bibliografía
 
