@@ -11,6 +11,8 @@ from agents.doctor_agent import DoctorAgent
 from agents.state import HomecareAgentState
 from config import settings
 from db.repository import HomecareRepository
+from notifications.email import send_risk_email_alert
+from notifications.telegram_alerts import send_telegram_risk_alert
 from utils.risk_levels import RISK_LEVELS, estimate_rule_based_risk, normalize_risk_level, should_alert_staff
 
 
@@ -145,20 +147,37 @@ class NurseAgent:
         if not state.get("alert_needed"):
             return {**state, "alert_sent": False}
         risk = RISK_LEVELS[normalize_risk_level(state.get("risk_level"))]
+        recipients = await _get_alert_recipients(self.repository, state["patient_id"])
+        patient = recipients.get("patient") or {}
         message = (
-            f"Alerta HomecareCCV: paciente {state['patient_id']} con riesgo {risk['label']}. "
+            f"Alerta HomecareCCV: paciente {patient.get('full_name') or state['patient_id']} "
+            f"con riesgo {risk['label']}. "
             f"{risk['description']} Signos: {state.get('vital_signs', {})}"
         )
+        notification_payload = {
+            **recipients,
+            "patient_id": state["patient_id"],
+            "patient_name": patient.get("full_name"),
+            "risk_level": normalize_risk_level(state.get("risk_level")),
+            "message": message,
+            "vital_signs": state.get("vital_signs", {}),
+            "recommendations": state.get("recommendations") or risk["action"],
+        }
+        telegram_sent = await send_telegram_risk_alert(notification_payload)
+        email_sent = await send_risk_email_alert(notification_payload)
         await self.repository.save_alert(
             {
                 "patient_id": state["patient_id"],
                 "prediction_id": state.get("prediction_id"),
                 "risk_level": normalize_risk_level(state.get("risk_level")),
                 "message": message,
-                "sent_to_patient": False,
-                "sent_to_doctor": False,
-                "email_sent": False,
-                "telegram_sent": False,
+                "sent_to_patient": bool(recipients.get("patient_telegram_chat_id") and telegram_sent),
+                "sent_to_doctor": bool(
+                    (recipients.get("doctor_telegram_chat_id") and telegram_sent)
+                    or (recipients.get("doctor_email") and email_sent)
+                ),
+                "email_sent": email_sent,
+                "telegram_sent": telegram_sent,
             }
         )
         return {**state, "alert_sent": True}
@@ -324,6 +343,12 @@ def build_ml_features(
 
 def _has_blocking_validation_errors(state: HomecareAgentState) -> bool:
     return bool(state.get("validation_errors"))
+
+
+async def _get_alert_recipients(repository: HomecareRepository, patient_id: str) -> dict[str, Any]:
+    if hasattr(repository, "get_alert_recipients"):
+        return await repository.get_alert_recipients(patient_id)
+    return {}
 
 
 def _encode_gender(value: Any) -> int | None:

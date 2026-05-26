@@ -11,6 +11,8 @@ Base local: `http://localhost:8000`
 | POST | `/agents/vital-report` | Ejecuta flujo Enfermera → ML → Médico → respuesta |
 | POST | `/ml/predict` | Predicción de riesgo en tiempo real |
 | GET | `/models` | Resultados comparativos del entrenamiento ML |
+| POST | `/webhook` | Webhook de Telegram para recibir updates del bot |
+| POST | `/telegram/webhook/setup` | Configura el webhook de Telegram usando `TELEGRAM_WEBHOOK_URL` |
 
 ## Endpoints planeados
 
@@ -24,6 +26,7 @@ Base local: `http://localhost:8000`
 | Usuarios | `/users` | Sprint 5 |
 | Modelos ML | `/models` | Sprint 2 y 5 |
 | ML predict | `/ml/predict` | Sprint 2 |
+| Telegram bot | `/webhook` | Sprint 4 |
 
 ## Agentes
 
@@ -99,6 +102,34 @@ Response:
   "alert_sent": true,
   "final_response": "...",
   "rag_sources": []
+}
+```
+
+## Telegram
+
+### POST `/webhook`
+
+Recibe updates enviados por Telegram cuando el bot está configurado en modo webhook. Requiere `TELEGRAM_BOT_TOKEN`.
+
+Request: payload nativo de Telegram.
+
+Response:
+
+```json
+{
+  "ok": true
+}
+```
+
+### POST `/telegram/webhook/setup`
+
+Configura el webhook remoto del bot usando `TELEGRAM_WEBHOOK_URL`.
+
+Response:
+
+```json
+{
+  "ok": true
 }
 ```
 
