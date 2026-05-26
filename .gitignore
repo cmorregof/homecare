@@ -28,6 +28,8 @@ pnpm-debug.log*
 backend/ml/models/*.pkl
 backend/ml/models/*.joblib
 backend/ml/models/comparison_results.json
+!backend/ml/models/best_model.pkl
+!backend/ml/models/comparison_results.json
 data/processed/*.csv
 data/raw/
 data/mock/healthcare-dataset-stroke-data.csv
@@ -44,6 +46,7 @@ data/mock/*.zip
 # Logs
 *.log
 logs/
+backend/catboost_info/
 
 # Generated exports
 coverage/

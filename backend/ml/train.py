@@ -32,13 +32,21 @@ DEFAULT_RESULTS_PATH = BACKEND_DIR / "ml" / "models" / "comparison_results.json"
 
 METRIC = "f1_macro"
 CV_FOLDS = 5
+EXPENSIVE_MODEL_TRAIN_LIMIT = 12000
+EXPENSIVE_MODELS = {"svm", "knn", "mlp"}
+CV_SAMPLE_LIMIT = 25000
 
 
 def build_model_registry(strict_external: bool = False) -> dict[str, Any]:
     models: dict[str, Any] = {
         "logistic_regression": LogisticRegression(max_iter=1000, class_weight="balanced"),
         "decision_tree": DecisionTreeClassifier(class_weight="balanced", random_state=42),
-        "random_forest": RandomForestClassifier(n_estimators=200, class_weight="balanced", random_state=42),
+        "random_forest": RandomForestClassifier(
+            n_estimators=200,
+            class_weight="balanced",
+            random_state=42,
+            n_jobs=-1,
+        ),
         "gradient_boosting": GradientBoostingClassifier(n_estimators=200, random_state=42),
         "svm": SVC(kernel="rbf", class_weight="balanced", probability=True, random_state=42),
         "knn": KNeighborsClassifier(n_neighbors=7),
@@ -54,12 +62,18 @@ def build_model_registry(strict_external: bool = False) -> dict[str, Any]:
             module = __import__(module_name, fromlist=[class_name])
             model_class = getattr(module, class_name)
             if name == "xgboost":
-                models[name] = model_class(n_estimators=200, eval_metric="mlogloss", random_state=42)
+                models[name] = model_class(n_estimators=200, eval_metric="mlogloss", random_state=42, n_jobs=-1)
             elif name == "lightgbm":
-                models[name] = model_class(n_estimators=200, class_weight="balanced", random_state=42)
+                models[name] = model_class(n_estimators=200, class_weight="balanced", random_state=42, n_jobs=-1)
             else:
-                models[name] = model_class(iterations=200, verbose=0, random_state=42)
-        except ModuleNotFoundError:
+                models[name] = model_class(
+                    iterations=200,
+                    verbose=0,
+                    random_state=42,
+                    thread_count=-1,
+                    allow_writing_files=False,
+                )
+        except Exception:
             if strict_external:
                 raise
             models[name] = None
@@ -99,6 +113,7 @@ def train_all_models(
     results: list[dict[str, Any]] = []
     trained_models: dict[str, Any] = {}
     for name, estimator in registry.items():
+        print(f"[train] Starting {name}", flush=True)
         if estimator is None:
             results.append(
                 {
@@ -108,6 +123,7 @@ def train_all_models(
                 }
             )
             continue
+        x_model_train, y_model_train = _training_frame_for_model(name, x_train, y_train)
         pipeline = Pipeline(
             steps=[
                 ("preprocess", Pipeline([("imputer", SimpleImputer(strategy="median")), ("scaler", StandardScaler())])),
@@ -115,11 +131,15 @@ def train_all_models(
             ]
         )
         try:
-            cv_scores = _cross_validate(pipeline, x_train, y_train)
-            pipeline.fit(x_train, y_train)
+            x_cv, y_cv = _cv_frame(x_model_train, y_model_train)
+            cv_scores = _cross_validate(pipeline, x_cv, y_cv)
+            pipeline.fit(x_model_train, y_model_train)
             result = {
                 "model": name,
                 "status": "trained",
+                "train_rows_used": int(len(x_model_train)),
+                "train_rows_available": int(len(x_train)),
+                "cv_rows_used": int(len(x_cv)),
                 "cv_f1_macro_mean": float(cv_scores.mean()) if len(cv_scores) else None,
                 "cv_f1_macro_std": float(cv_scores.std()) if len(cv_scores) else None,
                 "validation": evaluate_classifier(pipeline, x_validation, y_validation),
@@ -127,8 +147,14 @@ def train_all_models(
             }
             results.append(result)
             trained_models[name] = pipeline
+            print(
+                f"[train] Finished {name}: validation f1_macro="
+                f"{result['validation']['f1_macro']:.4f}",
+                flush=True,
+            )
         except Exception as exc:
             results.append({"model": name, "status": "failed", "reason": str(exc)})
+            print(f"[train] Failed {name}: {exc}", flush=True)
 
     best = select_best_model(results)
     best_model_name = str(best["model"])
@@ -202,6 +228,38 @@ def _cross_validate(pipeline: Pipeline, x_train: pd.DataFrame, y_train: pd.Serie
         return pd.Series(dtype=float).to_numpy()
     cv = StratifiedKFold(n_splits=folds, shuffle=True, random_state=42)
     return cross_val_score(pipeline, x_train, y_train, cv=cv, scoring=METRIC)
+
+
+def _training_frame_for_model(
+    model_name: str,
+    x_train: pd.DataFrame,
+    y_train: pd.Series,
+) -> tuple[pd.DataFrame, pd.Series]:
+    if model_name not in EXPENSIVE_MODELS or len(x_train) <= EXPENSIVE_MODEL_TRAIN_LIMIT:
+        return x_train, y_train
+    frame = x_train.copy()
+    frame[TARGET] = y_train.to_numpy()
+    per_class = max(1, EXPENSIVE_MODEL_TRAIN_LIMIT // frame[TARGET].nunique())
+    sampled = _sample_per_class(frame, per_class)
+    return sampled[FEATURES], sampled[TARGET].astype(int)
+
+
+def _cv_frame(x_train: pd.DataFrame, y_train: pd.Series) -> tuple[pd.DataFrame, pd.Series]:
+    if len(x_train) <= CV_SAMPLE_LIMIT:
+        return x_train, y_train
+    frame = x_train.copy()
+    frame[TARGET] = y_train.to_numpy()
+    per_class = max(1, CV_SAMPLE_LIMIT // frame[TARGET].nunique())
+    sampled = _sample_per_class(frame, per_class)
+    return sampled[FEATURES], sampled[TARGET].astype(int)
+
+
+def _sample_per_class(frame: pd.DataFrame, per_class: int) -> pd.DataFrame:
+    parts = [
+        group.sample(min(len(group), per_class), random_state=42)
+        for _, group in frame.groupby(TARGET, group_keys=False)
+    ]
+    return pd.concat(parts, ignore_index=True).sample(frac=1, random_state=42).reset_index(drop=True)
 
 
 def _safe_stratify(data: pd.DataFrame):

@@ -28,7 +28,10 @@ def compute_shap_values(model: object, feature_frame: Any) -> dict[str, float]:
             array = array[0, :, -1]
         elif array.ndim == 2:
             array = array[0]
-        return _as_feature_dict(array)
+        shap_values = _as_feature_dict(array)
+        if not any(abs(value) > 1e-12 for value in shap_values.values()):
+            return compute_proxy_shap_values(model, feature_frame)
+        return shap_values
     except Exception:
         return compute_proxy_shap_values(model, feature_frame)
 
