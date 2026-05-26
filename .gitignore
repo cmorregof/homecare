@@ -30,6 +30,10 @@ backend/ml/models/*.joblib
 backend/ml/models/comparison_results.json
 data/processed/*.csv
 data/raw/
+data/mock/healthcare-dataset-stroke-data.csv
+data/mock/cardio_train.csv
+data/mock/heart.csv
+data/mock/*.zip
 *.parquet
 
 # OS and editor
