@@ -1,0 +1,26 @@
+FEATURES = [
+    "age",
+    "gender_encoded",
+    "systolic_bp",
+    "diastolic_bp",
+    "heart_rate",
+    "oxygen_saturation",
+    "glucose",
+    "bmi",
+    "cholesterol_level",
+    "hypertension_history",
+    "heart_disease_history",
+    "stroke_history",
+    "diabetes_history",
+    "smoking_encoded",
+    "alcohol_intake",
+    "physical_activity",
+    "pain_score",
+    "dizziness_score",
+    "dyspnea_score",
+    "pulse_pressure",
+    "map",
+    "bmi_category",
+]
+
+TARGET = "risk_level"

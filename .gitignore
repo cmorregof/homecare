@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Node
+node_modules/
+.next/
+out/
+dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment
+.env
+.env.*
+!.env.example
+!.env.local.example
+
+# Data and models
+backend/ml/models/*.pkl
+backend/ml/models/*.joblib
+backend/ml/models/comparison_results.json
+data/processed/*.csv
+data/raw/
+*.parquet
+
+# OS and editor
+.DS_Store
+.idea/
+.vscode/
+
+# Logs
+*.log
+logs/
+
+# Generated exports
+coverage/
+htmlcov/
