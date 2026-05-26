@@ -34,6 +34,7 @@ class Settings:
     resend_api_key: str | None = os.getenv("RESEND_API_KEY")
     from_email: str = os.getenv("FROM_EMAIL", "alertas@homecareccv.co")
 
+    ml_api_url: str = os.getenv("ML_API_URL", "http://localhost:8000")
     ml_model_path: str = os.getenv("ML_MODEL_PATH", "backend/ml/models/best_model.pkl")
     rag_chunk_size: int = _int_env("RAG_CHUNK_SIZE", 500)
     rag_overlap: int = _int_env("RAG_OVERLAP", 50)

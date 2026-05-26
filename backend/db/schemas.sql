@@ -143,3 +143,33 @@ CREATE INDEX IF NOT EXISTS idx_alerts_patient_created ON alerts(patient_id, crea
 CREATE INDEX IF NOT EXISTS idx_alerts_acknowledged ON alerts(acknowledged);
 CREATE INDEX IF NOT EXISTS idx_rag_documents_embedding
   ON rag_documents USING ivfflat (embedding vector_cosine_ops);
+
+CREATE OR REPLACE FUNCTION match_rag_documents(
+  query_embedding vector(1536),
+  match_count INT DEFAULT 5
+)
+RETURNS TABLE (
+  id UUID,
+  title TEXT,
+  source TEXT,
+  chunk_index INTEGER,
+  content TEXT,
+  metadata JSONB,
+  similarity FLOAT
+)
+LANGUAGE SQL
+STABLE
+AS $$
+  SELECT
+    rag_documents.id,
+    rag_documents.title,
+    rag_documents.source,
+    rag_documents.chunk_index,
+    rag_documents.content,
+    rag_documents.metadata,
+    1 - (rag_documents.embedding <=> query_embedding) AS similarity
+  FROM rag_documents
+  WHERE rag_documents.embedding IS NOT NULL
+  ORDER BY rag_documents.embedding <=> query_embedding
+  LIMIT match_count;
+$$;

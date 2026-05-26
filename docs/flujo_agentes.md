@@ -70,3 +70,10 @@ Salida:
 - El Agente Médico no cambia tratamientos ni formula medicamentos.
 - Todo riesgo alto o crítico genera alerta al médico responsable.
 - Todo error externo debe producir una respuesta clara y empática al paciente.
+
+## Implementación Sprint 3
+
+- `backend/agents/nurse_agent.py`: valida signos, persiste, llama ML, consulta al médico, registra alertas y construye respuesta final.
+- `backend/agents/doctor_agent.py`: recupera contexto RAG, llama OpenAI si hay API key y usa fallback clínico conservador si falla.
+- `backend/agents/graph.py`: usa LangGraph cuando está instalado y un ejecutor compatible para desarrollo local sin dependencias instaladas.
+- `backend/api/routes/agents.py`: expone `POST /agents/vital-report`.
