@@ -4,12 +4,45 @@
 CREATE EXTENSION IF NOT EXISTS vector;
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
--- Supabase provides auth.users. The minimal local stub keeps docker-compose
--- development usable when running against a plain pgvector PostgreSQL image.
-CREATE SCHEMA IF NOT EXISTS auth;
-CREATE TABLE IF NOT EXISTS auth.users (
-  id UUID PRIMARY KEY
-);
+-- Supabase Cloud already owns auth.users and auth.uid(); do not create them
+-- there. The guarded block below only creates minimal local stubs when this
+-- schema runs against the plain pgvector PostgreSQL image from docker-compose.
+DO $$
+BEGIN
+  CREATE SCHEMA IF NOT EXISTS auth;
+
+  IF to_regclass('auth.users') IS NULL THEN
+    CREATE TABLE auth.users (
+      id UUID PRIMARY KEY
+    );
+  END IF;
+
+  IF to_regprocedure('auth.uid()') IS NULL THEN
+    CREATE FUNCTION auth.uid()
+    RETURNS UUID
+    LANGUAGE SQL
+    STABLE
+    AS 'SELECT NULL::UUID';
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+    CREATE ROLE anon;
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+    CREATE ROLE authenticated;
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN
+    CREATE ROLE service_role;
+  END IF;
+EXCEPTION
+  WHEN insufficient_privilege THEN
+    -- Supabase manages auth schema objects and platform roles.
+    -- If this branch runs in Supabase Cloud, auth.users/auth.uid already exist.
+    NULL;
+END
+$$;
 
 CREATE TABLE IF NOT EXISTS ips (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -172,4 +205,131 @@ AS $$
   WHERE rag_documents.embedding IS NOT NULL
   ORDER BY rag_documents.embedding <=> query_embedding
   LIMIT match_count;
+$$;
+
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION match_rag_documents(vector, INT) TO authenticated, service_role;
+
+ALTER TABLE ips ENABLE ROW LEVEL SECURITY;
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE patient_clinical_info ENABLE ROW LEVEL SECURITY;
+ALTER TABLE vital_signs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE risk_predictions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE clinical_reports ENABLE ROW LEVEL SECURITY;
+ALTER TABLE alerts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE rag_documents ENABLE ROW LEVEL SECURITY;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'ips' AND policyname = 'ips_select_authenticated'
+  ) THEN
+    CREATE POLICY ips_select_authenticated
+      ON ips FOR SELECT TO authenticated
+      USING (TRUE);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'profiles' AND policyname = 'profiles_select_own'
+  ) THEN
+    CREATE POLICY profiles_select_own
+      ON profiles FOR SELECT TO authenticated
+      USING (id = auth.uid());
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'profiles' AND policyname = 'profiles_insert_own'
+  ) THEN
+    CREATE POLICY profiles_insert_own
+      ON profiles FOR INSERT TO authenticated
+      WITH CHECK (id = auth.uid());
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'profiles' AND policyname = 'profiles_update_own'
+  ) THEN
+    CREATE POLICY profiles_update_own
+      ON profiles FOR UPDATE TO authenticated
+      USING (id = auth.uid())
+      WITH CHECK (id = auth.uid());
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'patient_clinical_info' AND policyname = 'patient_clinical_info_select_own'
+  ) THEN
+    CREATE POLICY patient_clinical_info_select_own
+      ON patient_clinical_info FOR SELECT TO authenticated
+      USING (patient_id = auth.uid());
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'vital_signs' AND policyname = 'vital_signs_select_own'
+  ) THEN
+    CREATE POLICY vital_signs_select_own
+      ON vital_signs FOR SELECT TO authenticated
+      USING (patient_id = auth.uid());
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'vital_signs' AND policyname = 'vital_signs_insert_own'
+  ) THEN
+    CREATE POLICY vital_signs_insert_own
+      ON vital_signs FOR INSERT TO authenticated
+      WITH CHECK (patient_id = auth.uid());
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'risk_predictions' AND policyname = 'risk_predictions_select_own'
+  ) THEN
+    CREATE POLICY risk_predictions_select_own
+      ON risk_predictions FOR SELECT TO authenticated
+      USING (patient_id = auth.uid());
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'clinical_reports' AND policyname = 'clinical_reports_select_own'
+  ) THEN
+    CREATE POLICY clinical_reports_select_own
+      ON clinical_reports FOR SELECT TO authenticated
+      USING (patient_id = auth.uid());
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'alerts' AND policyname = 'alerts_select_own'
+  ) THEN
+    CREATE POLICY alerts_select_own
+      ON alerts FOR SELECT TO authenticated
+      USING (patient_id = auth.uid() OR acknowledged_by = auth.uid());
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'alerts' AND policyname = 'alerts_update_acknowledgement'
+  ) THEN
+    CREATE POLICY alerts_update_acknowledgement
+      ON alerts FOR UPDATE TO authenticated
+      USING (patient_id = auth.uid() OR acknowledged_by = auth.uid())
+      WITH CHECK (patient_id = auth.uid() OR acknowledged_by = auth.uid());
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'rag_documents' AND policyname = 'rag_documents_select_authenticated'
+  ) THEN
+    CREATE POLICY rag_documents_select_authenticated
+      ON rag_documents FOR SELECT TO authenticated
+      USING (TRUE);
+  END IF;
+END
 $$;

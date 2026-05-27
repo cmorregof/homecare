@@ -1,302 +1,432 @@
-# 🏥 HomecareCCV
+# 🏥 HomecareCCV: AI Agents for Cardio-Cerebrovascular Home Monitoring
 
-> Sistema de monitoreo domiciliario con agentes IA para pacientes
-> cardio-cerebrovasculares — Universidad Nacional de Colombia
+*A production-oriented digital health platform for remote monitoring of
+cardio-cerebrovascular patients, combining Telegram-based vital-sign intake,
+clinical LLM agents, real-time machine learning risk stratification, RAG over
+medical guidelines, and role-based clinical dashboards.*
 
-## Tabla de contenidos
+[![Repository](https://img.shields.io/badge/GitHub-homecare-181717?style=for-the-badge&logo=github)](https://github.com/cmorregof/homecare)
+[![Telegram Bot](https://img.shields.io/badge/Telegram-project918__homecare__bot-26A5E4?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/project918_homecare_bot)
+[![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-Backend-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![Next.js](https://img.shields.io/badge/Next.js-14-000000?style=for-the-badge&logo=nextdotjs)](https://nextjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
 
-1. [¿Qué es HomecareCCV?](#qué-es-homecareccv)
-2. [Arquitectura del sistema](#arquitectura-del-sistema)
-3. [Flujo de los agentes IA](#flujo-de-los-agentes-ia)
-4. [Stack tecnológico](#stack-tecnológico)
-5. [Estructura del repositorio](#estructura-del-repositorio)
-6. [Datasets utilizados](#datasets-utilizados)
-7. [Estratificación de riesgo](#estratificación-de-riesgo)
-8. [Variables clínicas](#variables-clínicas)
-9. [Modelos de ML](#modelos-de-ml)
-10. [Instalación y desarrollo local](#instalación-y-desarrollo-local)
-11. [Variables de entorno](#variables-de-entorno)
-12. [Despliegue](#despliegue)
-13. [Bibliografía](#bibliografía)
-14. [Equipo de investigación](#equipo-de-investigación)
-15. [Licencia](#licencia)
+---
 
-## ¿Qué es HomecareCCV?
+## 🎯 The Clinical Problem
 
-HomecareCCV es una plataforma end-to-end de monitoreo en casa para pacientes con enfermedades cardio-cerebrovasculares. Combina un bot conversacional de Telegram, agentes clínicos basados en LLM, modelos de machine learning en tiempo real, RAG sobre guías clínicas y una aplicación web con dashboards por rol.
+Cardiovascular disease is one of the leading causes of mortality in Colombia,
+and many post-stroke patients survive with permanent deficits that require
+continuous home care. In practice, clinical teams often receive late signals:
+subtle blood-pressure changes, hypoxemia, glucose excursions, dizziness,
+dyspnea, or neurological deterioration may evolve at home before anyone sees
+the trend.
 
-El sistema está fundamentado en el proyecto de investigación 56031 de la Universidad Nacional de Colombia sede Manizales, dirigido por la doctora Elisabeth Restrepo Parra, con financiación de Minciencias y foco territorial en el departamento del Atlántico, Colombia.
+**HomecareCCV** turns the patient's home into a monitored clinical surface.
+Every 6 hours, patients report vital signs through Telegram. A virtual nurse
+agent structures the message, a trained ML model estimates risk, a doctor agent
+reviews the case with clinical context and RAG, and high-risk cases trigger
+multichannel alerts for the patient and the assigned care team.
 
-## Arquitectura del sistema
+This repository is based on research project **56031** from Universidad
+Nacional de Colombia, Manizales, led by **Dr. Elisabeth Restrepo Parra** and
+funded by **Minciencias**, with territorial focus on Atlántico, Colombia.
 
-```text
-PACIENTE
-│
-│ reporta signos vitales cada 6 horas
-▼
-┌─────────────────────────────────────────────────┐
-│ TELEGRAM BOT                                    │
-│ python-telegram-bot v20+                        │
-└──────────────────────┬──────────────────────────┘
-                       │
-                       ▼
-┌─────────────────────────────────────────────────┐
-│ AGENTE 1 - ENFERMERA                            │
-│ LangGraph + OpenAI                              │
-│                                                 │
-│ 1. Valida y estructura signos vitales           │
-│ 2. Persiste en Supabase                         │
-│ 3. Llama al script ML                           │
-│ 4. Llama al Agente Médico                       │
-│ 5. Consolida respuesta al paciente              │
-│ 6. Dispara alertas si aplica                    │
-└────────────┬──────────────────┬─────────────────┘
-             │                  │
-             ▼                  ▼
-┌────────────────────┐  ┌──────────────────────────┐
-│ SCRIPT ML          │  │ AGENTE 2 - MÉDICO         │
-│ FastAPI + sklearn  │  │ LangGraph + RAG           │
-│ XGBoost/LightGBM   │  │ pgvector + guías clínicas │
-│ CatBoost + SHAP    │  │                          │
-│                    │  │ Interpreta signos, riesgo │
-│ riesgo + factores  │  │ y genera reporte clínico  │
-└────────────────────┘  └──────────────────────────┘
-             │                  │
-             └────────┬─────────┘
-                      ▼
-┌─────────────────────────────────────────────────┐
-│ SUPABASE                                        │
-│ PostgreSQL + pgvector + Auth + Realtime         │
-│                                                 │
-│ profiles, ips, patient_clinical_info            │
-│ vital_signs, risk_predictions                   │
-│ clinical_reports, alerts, rag_documents         │
-└──────────────────────┬──────────────────────────┘
-                       │
-                       ▼
-┌─────────────────────────────────────────────────┐
-│ WEB APP - Next.js 14                            │
-│                                                 │
-│ Paciente: historial, riesgo, recomendaciones    │
-│ IPS: pacientes, alertas, reportes clínicos      │
-│ Admin: usuarios, métricas, modelos, RAG         │
-└─────────────────────────────────────────────────┘
+---
 
-ALERTAS:
-  riesgo alto o crítico
-  → Telegram a paciente y médico responsable
-  → Email al médico responsable
+## 🏗️ System Architecture
+
+```mermaid
+graph TB
+    subgraph Patient["👤 Patient at Home"]
+        TG["Telegram Bot<br/>vital signs every 6h"]
+        WEBPAT["Patient Dashboard<br/>history, risk, recommendations"]
+    end
+
+    subgraph Frontend["☁️ Vercel — Next.js 14"]
+        NEXT["App Router<br/>TypeScript + Tailwind"]
+        AUTH["Supabase Auth<br/>role-based routing"]
+        DASH["Clinical Dashboards<br/>patient / IPS / admin"]
+    end
+
+    subgraph Backend["🚂 Railway — FastAPI"]
+        API["FastAPI API<br/>health, agents, ML, Telegram"]
+        BOT["python-telegram-bot<br/>commands + guided intake"]
+        NURSE["Agent 1: Carmen<br/>LangGraph nurse workflow"]
+        DOCTOR["Agent 2: Doctor<br/>LangGraph + RAG"]
+        ML["ML Engine<br/>LightGBM + SHAP"]
+        ALERTS["Alert Service<br/>Telegram + Resend email"]
+    end
+
+    subgraph Data["🗄️ Supabase"]
+        PG["PostgreSQL<br/>profiles, vitals, predictions, reports, alerts"]
+        VECTOR["pgvector<br/>clinical guideline chunks"]
+        REALTIME["Realtime<br/>alert updates"]
+    end
+
+    subgraph External["🌐 External Services"]
+        OPENAI["OpenAI<br/>GPT-4o + text-embedding-3-small"]
+        TELEGRAM["Telegram HTTP API"]
+        RESEND["Resend Email API"]
+    end
+
+    TG --> BOT
+    WEBPAT --> NEXT
+    NEXT --> AUTH
+    NEXT --> DASH
+    DASH <--> PG
+    DASH <--> REALTIME
+    BOT --> NURSE
+    API --> NURSE
+    NURSE --> PG
+    NURSE --> ML
+    NURSE --> DOCTOR
+    DOCTOR --> VECTOR
+    DOCTOR --> OPENAI
+    ML --> PG
+    NURSE --> ALERTS
+    ALERTS --> TELEGRAM
+    ALERTS --> RESEND
+    API --> PG
 ```
 
-## Flujo de los agentes IA
+---
 
-```text
-Mensaje del paciente
-        │
-        ▼
-validate_vitals
-        │
-        ▼
-save_to_db
-        │
-        ▼
-call_ml_script
-        │
-        ├───────────────► check_alert_needed ──► send_alerts
-        │                                      │
-        ▼                                      │
-call_doctor_agent                              │
-        │                                      │
-        └──────────────────┬───────────────────┘
-                           ▼
-                    build_response
-                           │
-                           ▼
-                  respond_to_patient
+## 🤖 Agent Flow
+
+```mermaid
+flowchart LR
+    MSG["Patient message<br/>free text or guided flow"] --> VALIDATE["validate_vitals"]
+    VALIDATE --> SAVE["save_to_db"]
+    SAVE --> PREDICT["call_ml_script"]
+    PREDICT --> DOCTOR["call_doctor_agent"]
+    PREDICT --> CHECK["check_alert_needed"]
+    CHECK -->|high / critical| SEND["send_alerts"]
+    CHECK -->|low / moderate| BUILD["build_response"]
+    SEND --> BUILD
+    DOCTOR --> BUILD
+    BUILD --> REPLY["respond_to_patient"]
 ```
 
-## Stack tecnológico
+**Design rule:** the nurse agent never diagnoses, and the doctor agent never
+prescribes or changes treatment. The system explains risk, escalates alerts,
+and supports clinical follow-up without replacing medical judgment.
 
-| Capa | Tecnología | Justificación |
-|---|---|---|
-| Bot conversacional | python-telegram-bot v20+ | API estable y adecuada para MVP |
-| Orquestación agentes | LangGraph | Estado compartido y grafo dirigido |
-| LLM | OpenAI GPT-4o | Calidad clínica conversacional y tool calling |
-| Embeddings RAG | text-embedding-3-small | Costo-eficiente y compatible con pgvector |
-| Vector DB | Supabase pgvector | Evita un servicio vectorial adicional |
-| Base de datos | Supabase PostgreSQL | Auth, Realtime y SQL administrado |
-| Backend API | FastAPI | Async, tipado y OpenAPI automático |
-| ML | scikit-learn, XGBoost, LightGBM, CatBoost | Comparación de 10 modelos clásicos |
-| Explicabilidad | SHAP | Factores de riesgo interpretables |
-| Frontend | Next.js 14, TypeScript, Tailwind CSS | App Router, SSR y UI tipada |
-| Gráficos | Recharts | Visualizaciones declarativas en React |
-| Email | Resend | Envío simple por API REST |
-| Backend deploy | Railway | Docker y variables de entorno |
-| Frontend deploy | Vercel | CI/CD para Next.js |
+---
 
-## Estructura del repositorio
+## 🚀 Key Features
+
+- **Telegram-first clinical intake:** `/start`, `/registro`, `/vitales`,
+  `/estado`, `/historial`, `/ayuda`, and `/emergencia`.
+- **Guided vital-sign workflow:** blood pressure, heart rate, oxygen
+  saturation, glucose, pain, dizziness, and dyspnea.
+- **Real ML model:** 76,028 unified Kaggle records, 21 clinical features,
+  SMOTE balancing, 10-model comparison, and LightGBM selected by validation
+  `f1_macro`.
+- **Explainable risk:** every prediction includes class probabilities,
+  confidence score, SHAP values, and top risk factors.
+- **Clinical RAG:** guideline chunks stored in Supabase `pgvector`, retrieved
+  for the doctor agent before generating structured recommendations.
+- **Role-based web app:** patient, IPS, and admin dashboards protected through
+  Supabase Auth middleware.
+- **High-risk escalation:** `high` and `critical` predictions trigger Telegram
+  and email alerts with retry-aware notification services.
+- **Production path:** Dockerized backend for Railway, Vercel-ready frontend,
+  GitHub Actions, smoke checks, and deployment runbooks.
+
+---
+
+## 🧠 Risk Stratification
+
+HomecareCCV combines clinical rules inspired by **MEWS**, cardiovascular risk
+criteria aligned with **Framingham-style factors**, and real-time ML
+classification.
+
+| Level | Label | Clinical Meaning | Action |
+|---|---|---|---|
+| `low` | 🟢 Bajo | Stable vital signs and low short-term deterioration signal | Routine monitoring every 6 hours |
+| `moderate` | 🟡 Moderado | Mild deviation or accumulated risk factors | Increase vigilance and monitor persistence |
+| `high` | 🔴 Alto | Significant risk signal requiring clinical awareness | Notify assigned medical staff |
+| `critical` | 🚨 Crítico | Emergency threshold or severe deterioration signal | Urgent care / Colombian emergency line 123 |
+
+Immediate critical thresholds include systolic BP `> 180` or `< 80`, heart rate
+`> 130` or `< 40`, oxygen saturation `< 88%`, or glucose `> 400` or `< 50`.
+
+Detailed criteria are documented in
+[`docs/estratificacion_riesgo.md`](docs/estratificacion_riesgo.md).
+
+---
+
+## 🧪 Machine Learning
+
+The ML pipeline unifies three public datasets into a common clinical schema,
+derives risk labels through MEWS-inspired rules, balances the training split
+with SMOTE, and evaluates 10 classical models.
+
+| Model | Validation F1 Macro | Test F1 Macro | Status |
+|---|---:|---:|---|
+| Logistic Regression | 0.7051 | 0.6860 | trained |
+| Decision Tree | 0.9724 | 0.9777 | trained |
+| Random Forest | 0.9837 | 0.9614 | trained |
+| Gradient Boosting | 0.9721 | 0.9674 | trained |
+| XGBoost | 0.9810 | 0.9785 | trained |
+| **LightGBM** | **0.9870** | **0.9733** | **selected** |
+| CatBoost | 0.9724 | 0.9772 | trained |
+| SVM | 0.6821 | 0.6502 | sampled training |
+| KNN | 0.6280 | 0.6220 | sampled training |
+| MLP | 0.9092 | 0.8961 | sampled training |
+
+Selected artifact:
+
+```text
+backend/ml/models/best_model.pkl
+backend/ml/models/comparison_results.json
+```
+
+See [`docs/modelo_real.md`](docs/modelo_real.md) for reproducibility notes.
+
+---
+
+## 🧬 Clinical Variables
+
+| Group | Features |
+|---|---|
+| Demographics | `age`, `gender_encoded` |
+| Vital signs | `systolic_bp`, `diastolic_bp`, `heart_rate`, `oxygen_saturation`, `glucose` |
+| Baseline risk | `bmi`, `cholesterol_level`, `hypertension_history`, `heart_disease_history`, `stroke_history`, `diabetes_history` |
+| Habits | `smoking_encoded`, `alcohol_intake`, `physical_activity` |
+| Symptoms | `pain_score`, `dizziness_score`, `dyspnea_score` |
+| Derived features | `pulse_pressure`, `map`, `bmi_category` |
+
+Full source mapping is documented in
+[`docs/variables_clinicas.md`](docs/variables_clinicas.md).
+
+---
+
+## 🛠️ Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Frontend | Next.js 14, TypeScript, Tailwind CSS, Recharts, lucide-react |
+| Auth & DB | Supabase Auth, PostgreSQL, Realtime, pgvector |
+| Backend API | Python 3.12, FastAPI, pydantic-settings |
+| Agents | LangGraph, OpenAI GPT-4o |
+| RAG | OpenAI `text-embedding-3-small`, Supabase pgvector |
+| Telegram | python-telegram-bot v20+, APScheduler reminders |
+| ML | scikit-learn, imbalanced-learn, LightGBM, XGBoost, CatBoost, SHAP |
+| Email | Resend |
+| Deployment | Railway backend, Vercel frontend, GitHub Actions |
+| Local infra | Docker Compose with pgvector/PostgreSQL |
+
+---
+
+## 📁 Repository Map
 
 ```text
 homecare-ccv/
-├── README.md
-├── .env.example
-├── .gitignore
-├── docker-compose.yml
-├── docs/
-├── backend/
-│   ├── main.py
-│   ├── config.py
-│   ├── agents/
-│   ├── ml/
-│   ├── rag/
-│   ├── bot/
-│   ├── api/
-│   ├── db/
-│   ├── notifications/
-│   └── utils/
-├── frontend/
-│   ├── app/
-│   ├── components/
-│   ├── lib/
-│   └── types/
-├── data/
-│   ├── mock/
-│   ├── processed/
-│   └── etl/
-└── .github/
-    └── workflows/
+├── backend/                  # FastAPI, agents, ML, RAG, Telegram, alerts
+│   ├── agents/               # Nurse + doctor LangGraph workflows
+│   ├── api/routes/           # REST endpoints
+│   ├── bot/                  # Telegram commands and guided intake
+│   ├── db/                   # Supabase client and SQL schema
+│   ├── ml/                   # ETL-facing model training and prediction
+│   ├── notifications/        # Telegram and email alert services
+│   └── rag/                  # Embeddings and pgvector retrieval
+├── frontend/                 # Next.js dashboards by role
+│   ├── app/                  # App Router routes
+│   ├── components/           # UI, charts, risk, vitals, alerts, chat
+│   └── lib/                  # Supabase and API clients
+├── data/                     # Kaggle dataset placeholders, ETL, processed data
+├── docs/                     # Architecture, deployment, bibliography, operations
+├── scripts/                  # Environment and deployment smoke checks
+└── .github/workflows/        # Railway and Vercel CI/CD
 ```
 
-## Datasets utilizados
+---
 
-| Dataset | Fuente | Registros | Uso en el sistema |
-|---|---:|---:|---|
-| Stroke Prediction Dataset | Kaggle, Fedesoriano | 5,110 | Factores de ACV y comorbilidad |
-| Cardiovascular Disease Dataset | Kaggle, Sulianova | 70,000 | Presión arterial, colesterol, glucosa y hábitos |
-| Heart Failure Prediction | Kaggle, Fedesoriano | 918 | Complemento para riesgo cardiovascular |
-
-## Estratificación de riesgo
-
-| Nivel | Etiqueta | Criterios orientadores | Acción |
-|---|---|---|---|
-| low | 🟢 BAJO | MEWS 0-2, Framingham < 5% | Monitoreo rutinario cada 6 horas |
-| moderate | 🟡 MODERADO | MEWS 3-4, Framingham 5-9% | Aumentar vigilancia y contactar si persiste |
-| high | 🔴 ALTO | MEWS 5-6, Framingham > 9% | Notificar al médico responsable |
-| critical | 🚨 CRÍTICO | MEWS ≥ 7 o umbral crítico inmediato | Urgencias o línea 123 Colombia |
-
-## Variables clínicas
-
-| Variable | Tipo | Fuente esperada |
-|---|---|---|
-| age | numérica | Perfil clínico |
-| gender_encoded | categórica codificada | Perfil clínico |
-| systolic_bp | numérica | Telegram/web/manual |
-| diastolic_bp | numérica | Telegram/web/manual |
-| heart_rate | numérica | Telegram/web/manual |
-| oxygen_saturation | numérica | Telegram/web/manual |
-| glucose | numérica | Telegram/web/manual/dataset |
-| bmi | numérica | Perfil clínico/dataset |
-| cholesterol_level | categórica ordinal | Perfil clínico/dataset |
-| hypertension_history | booleana | Historia clínica |
-| heart_disease_history | booleana | Historia clínica |
-| stroke_history | booleana | Historia clínica |
-| diabetes_history | booleana | Historia clínica |
-| smoking_encoded | categórica codificada | Historia clínica/dataset |
-| alcohol_intake | booleana | Historia clínica |
-| physical_activity | booleana | Historia clínica |
-| pain_score | ordinal 0-10 | Autorreporte |
-| dizziness_score | ordinal 0-10 | Autorreporte |
-| dyspnea_score | ordinal 0-10 | Autorreporte |
-| pulse_pressure | derivada | sistólica - diastólica |
-| map | derivada | presión arterial media |
-| bmi_category | derivada | bajo, normal, sobrepeso, obeso |
-
-## Modelos de ML
-
-La métrica principal de selección es `f1_macro`, con validación cruzada de 5 folds y balanceo por SMOTE.
-
-1. Logistic Regression
-2. Decision Tree
-3. Random Forest
-4. Gradient Boosting
-5. XGBoost
-6. LightGBM
-7. CatBoost
-8. SVM RBF
-9. KNN
-10. MLP
-
-## Instalación y desarrollo local
+## 💻 Local Setup
 
 ```bash
-git clone <repo-url> homecare-ccv
-cd homecare-ccv
-cp .env.example backend/.env
-cp .env.example frontend/.env.local
+# 1. Clone
+git clone https://github.com/cmorregof/homecare.git
+cd homecare
+
+# 2. Backend environment
+cp backend/.env.example backend/.env
+# Fill in: OPENAI_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_KEY,
+#          TELEGRAM_BOT_TOKEN, RESEND_API_KEY
+
+# 3. Frontend environment
+cp frontend/.env.local.example frontend/.env.local
+# Fill in: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY,
+#          NEXT_PUBLIC_API_URL, NEXT_PUBLIC_TELEGRAM_BOT_URL
+
+# 4. Run local database + backend container
 docker compose up --build
 ```
 
-Para ejecutar solo el backend:
+Run the frontend separately:
 
 ```bash
-cd backend
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+cd frontend
+npm install
+npm run dev
 ```
 
-Para preparar ML con datasets reales:
+Run the backend directly:
 
 ```bash
-PYTHONPATH=backend python data/etl/unify_datasets.py
+python3.12 -m venv .venv
+.venv/bin/python -m pip install -r backend/requirements.txt
 cd backend
-PYTHONPATH=. python -m ml.train
+PYTHONPATH=. ../.venv/bin/python -m uvicorn main:app --reload
 ```
 
-Para validar localmente sin los CSV de Kaggle:
+---
+
+## 📊 Dataset Pipeline
+
+Download the Kaggle datasets into `data/mock/`:
 
 ```bash
-PYTHONPATH=backend python data/etl/unify_datasets.py --allow-synthetic
-cd backend
-PYTHONPATH=. python -m ml.train --models logistic_regression decision_tree
+pip install kaggle
+
+kaggle datasets download fedesoriano/stroke-prediction-dataset \
+  -p data/mock/ --unzip
+
+kaggle datasets download sulianova/cardiovascular-disease-dataset \
+  -p data/mock/ --unzip
+
+kaggle datasets download fedesoriano/heart-failure-prediction \
+  -p data/mock/ --unzip
 ```
 
-## Variables de entorno
+Build the unified dataset and train:
 
-Las variables están documentadas en `.env.example`. Nunca se deben versionar archivos `.env`, `.env.local` ni llaves privadas.
+```bash
+PYTHONPATH=backend .venv/bin/python data/etl/unify_datasets.py
+cd backend
+PYTHONPATH=. ../.venv/bin/python -m ml.train
+```
 
-## Despliegue
+Datasets:
 
-Backend en Railway:
+| Dataset | Source | Records | Purpose |
+|---|---:|---:|---|
+| Stroke Prediction Dataset | Kaggle / Fedesoriano | 5,110 | Stroke risk factors and comorbidities |
+| Cardiovascular Disease Dataset | Kaggle / Sulianova | 70,000 | BP, cholesterol, glucose, lifestyle variables |
+| Heart Failure Prediction | Kaggle / Fedesoriano | 918 | Complementary cardiovascular risk signal |
 
-1. Conectar el repositorio.
-2. Usar `backend/` como root del servicio.
-3. Configurar variables de entorno.
-4. El contenedor usa `PORT` automaticamente y expone `/health`.
-5. Configurar el webhook de Telegram con `POST /telegram/webhook/setup`.
+---
 
-Frontend en Vercel:
+## 🧪 Quality Checks
 
-1. Conectar el repositorio.
-2. Seleccionar `frontend/` como root directory.
-3. Configurar `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_API_URL` y `NEXT_PUBLIC_TELEGRAM_BOT_URL`.
+```bash
+# Backend tests
+PYTHONPATH=backend .venv/bin/python -m unittest discover -s backend/tests -v
 
-La guia completa esta en `docs/despliegue.md` y la operacion diaria en `docs/operacion_produccion.md`.
+# Backend compile
+python3 -m compileall backend scripts
 
-## Bibliografía
+# Frontend
+cd frontend
+npm run lint
+npm run build
+npm run typecheck
 
-La bibliografía completa está en `docs/bibliografia.md` e incluye Tumaini et al. (2025), Zain et al. (2024), Lv et al. (2023), Ko et al. (2025), MedAgents, ClinicalAgents, guías MINSALUD y los datasets de Kaggle.
+# Deployment smoke test
+python3 scripts/smoke_deployment.py --backend-url http://127.0.0.1:8000
+```
 
-## Equipo de investigación
+Environment validation:
 
-Directora: Elisabeth Restrepo Parra - erestrepopa@unal.edu.co  
-Universidad Nacional de Colombia, sede Manizales  
-Facultad de Ciencias Exactas y Naturales  
-Departamento de Física y Química  
-Financiación: Minciencias Colombia  
-Código proyecto: 56031
+```bash
+python3 scripts/check_env.py --target backend --template backend/.env.example --allow-placeholder
+python3 scripts/check_env.py --target frontend --template frontend/.env.local.example --allow-placeholder
+```
 
-## Licencia
+---
 
-Pendiente de definición por el equipo de investigación y la Universidad Nacional de Colombia.
+## 🚢 Deployment
+
+**Backend: Railway**
+
+- Root service: `backend/`
+- Container: `backend/Dockerfile`
+- Health check: `/health`
+- Telegram webhook setup: `POST /telegram/webhook/setup`
+- CI workflow: `.github/workflows/backend_deploy.yml`
+
+**Frontend: Vercel**
+
+- Root directory: `frontend/`
+- Framework: Next.js
+- CI workflow: `.github/workflows/frontend_deploy.yml`
+
+**Required secrets**
+
+| Service | Variables |
+|---|---|
+| Backend | `OPENAI_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `TELEGRAM_BOT_TOKEN`, `RESEND_API_KEY`, `FROM_EMAIL` |
+| Frontend | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_TELEGRAM_BOT_URL` |
+| GitHub Actions | `RAILWAY_TOKEN`, `RAILWAY_SERVICE`, `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` |
+
+Full deployment instructions are in [`docs/despliegue.md`](docs/despliegue.md),
+with production operations in
+[`docs/operacion_produccion.md`](docs/operacion_produccion.md).
+
+---
+
+## 🏛️ Architecture Decisions
+
+**Why Telegram first?** It minimizes patient friction: no app install, no new
+password flow during monitoring, and a familiar channel for older or supported
+patients.
+
+**Why LangGraph?** The nurse and doctor workflows are stateful, conditional,
+and auditable. A graph makes validation, persistence, ML prediction, RAG,
+alerting, and final response explicit.
+
+**Why Supabase + pgvector?** Patient records, clinical reports, alerts, auth,
+realtime dashboards, and vector retrieval live in a single managed PostgreSQL
+surface without adding a separate vector database.
+
+**Why classical ML before transformers?** The first production phase requires
+strong tabular baselines, explainability, and reproducible clinical validation.
+Temporal Fusion Transformer / PatchTST is documented as Phase 2, once real
+longitudinal data from Atlántico is available.
+
+---
+
+## 📚 Scientific Basis
+
+The project documentation cites clinical and technical references including:
+
+- Tumaini et al. (2025), intensive vital-sign monitoring after stroke.
+- Zain et al. (2024), ML prediction for cardio-cerebrovascular readmission.
+- Lv et al. (2023), interpretable ML for 30-day stroke readmission.
+- Ko et al. (2025), remote vital-sign monitoring in hospital-at-home programs.
+- Ministerio de Salud Colombia, cardiovascular and metabolic disease guidelines.
+- MedAgents, ClinicalAgents, and LangGraph-based healthcare orchestration work.
+
+See [`docs/bibliografia.md`](docs/bibliografia.md) for the full bibliography.
+
+---
+
+## 👥 Research Team
+
+- **Director:** Elisabeth Restrepo Parra — erestrepopa@unal.edu.co
+- **Institution:** Universidad Nacional de Colombia, sede Manizales
+- **Faculty:** Facultad de Ciencias Exactas y Naturales
+- **Department:** Departamento de Física y Química
+- **Funding:** Minciencias, Colombia
+- **Project code:** 56031
+
+---
+
+## 📄 License
+
+License pending definition by the research team and Universidad Nacional de
+Colombia.
