@@ -9,6 +9,12 @@ import { getAuthCallbackUrl } from "@/lib/site-url";
 import { createBrowserSupabaseClient, isSupabaseConfigured } from "@/lib/supabase";
 import type { UserRole } from "@/types";
 
+const ROLE_HOME: Record<UserRole, string> = {
+  patient: "/patient/dashboard",
+  ips: "/ips/dashboard",
+  admin: "/admin/dashboard",
+};
+
 export default function RegisterPage() {
   const router = useRouter();
   const [fullName, setFullName] = useState("");
@@ -55,6 +61,8 @@ export default function RegisterPage() {
           setMessage(profileError.message);
           return;
         }
+        router.push(ROLE_HOME[role]);
+        return;
       }
       const params = new URLSearchParams({
         message: "Revisa tu correo y confirma la cuenta para ingresar a HomecareCCV.",

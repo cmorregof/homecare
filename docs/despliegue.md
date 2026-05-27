@@ -76,6 +76,15 @@ En Supabase Auth > URL Configuration:
 - Redirect URL: `https://<vercel-domain>/auth/callback`
 - Redirect URL local opcional: `http://localhost:3000/auth/callback`
 
+Durante pruebas, si Supabase aplica rate limit a los correos de confirmacion,
+puedes desactivar temporalmente la confirmacion en Auth > Providers > Email:
+
+- Confirm email: `OFF`
+
+Con esa opcion apagada, el registro devuelve sesion inmediata, la app crea el
+perfil en `profiles` y redirige directo al dashboard del rol seleccionado. Para
+produccion, vuelve a activar `Confirm email`.
+
 Validaciones:
 
 ```bash
