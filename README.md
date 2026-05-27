@@ -165,27 +165,50 @@ The ML pipeline unifies three public datasets into a common clinical schema,
 derives risk labels through MEWS-inspired rules, balances the training split
 with SMOTE, and evaluates 10 classical models.
 
-| Model | Validation F1 Macro | Test F1 Macro | Train Rows | Status |
-|---|---:|---:|---:|---|
-| Logistic Regression | 0.7051 | 0.6860 | 155,912 | trained |
-| Decision Tree | 0.9724 | 0.9777 | 155,912 | trained |
-| Random Forest | 0.9837 | 0.9614 | 155,912 | trained |
-| Gradient Boosting | 0.9721 | 0.9674 | 155,912 | trained |
-| XGBoost | 0.9810 | 0.9785 | 155,912 | trained |
-| **LightGBM** | **0.9870** | **0.9733** | **155,912** | **selected** |
-| CatBoost | 0.9724 | 0.9772 | 155,912 | trained |
-| SVM | 0.8147 | 0.8229 | 155,912 | trained |
-| KNN | 0.6902 | 0.7282 | 155,912 | trained |
-| MLP | 0.9552 | 0.9561 | 155,912 | trained |
+| Model | Val F1 Macro | Test F1 Macro | CV F1 Mean | Test ROC-AUC | Train Rows | Decision |
+|---|---:|---:|---:|---:|---:|---|
+| Logistic Regression | 0.7051 | 0.6860 | 0.8645 | 0.9877 | 155,912 | baseline |
+| Decision Tree | 0.9724 | 0.9777 | 0.9910 | 0.9885 | 155,912 | overfit-prone baseline |
+| Random Forest | 0.9837 | 0.9614 | 0.9947 | 0.9999 | 155,912 | strong baseline |
+| Gradient Boosting | 0.9721 | 0.9674 | 0.9939 | 0.9988 | 155,912 | strong baseline |
+| XGBoost | 0.9810 | 0.9785 | 0.9952 | 1.0000 | 155,912 | finalist |
+| **LightGBM** | **0.9870** | **0.9733** | **0.9954** | **0.9999** | **155,912** | **selected** |
+| CatBoost | 0.9724 | 0.9772 | 0.9952 | 0.9999 | 155,912 | finalist |
+| SVM | 0.8147 | 0.8229 | 0.8834 | 0.9928 | 155,912 | lower F1 |
+| KNN | 0.6902 | 0.7282 | 0.8805 | 0.9390 | 155,912 | lower F1 |
+| MLP | 0.9552 | 0.9561 | 0.9874 | 0.9998 | 155,912 | neural baseline |
 
-All 10 models are trained on the same SMOTE-balanced training split.
+All 10 models are trained on the same SMOTE-balanced training split. LightGBM is
+selected because it has the highest validation `f1_macro`, the predefined
+selection metric. The test split is kept as a final holdout, so it is reported
+for transparency but not used to choose the winner.
+
+Selected LightGBM parameters:
+
+| Parameter | Value |
+|---|---:|
+| `boosting_type` | `gbdt` |
+| `n_estimators` | 200 |
+| `learning_rate` | 0.1 |
+| `num_leaves` | 31 |
+| `max_depth` | -1 |
+| `class_weight` | `balanced` |
+| `objective` | `multiclass` |
+| `num_class` | 4 |
+| `random_state` | 42 |
+| Trained trees | 800 |
 
 Selected artifact:
 
 ```text
 backend/ml/models/best_model.pkl
 backend/ml/models/comparison_results.json
+backend/ml/models/training_metadata.json
 ```
+
+`training_metadata.json` stores model hyperparameters, split sizes, class
+distributions, feature schema, transfer-learning notes, and the fitted LightGBM
+booster details for future fine-tuning experiments.
 
 See [`docs/modelo_real.md`](docs/modelo_real.md) for reproducibility notes.
 

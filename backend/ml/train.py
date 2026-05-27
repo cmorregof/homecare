@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -29,10 +30,24 @@ REPO_ROOT = BACKEND_DIR.parent
 DEFAULT_DATASET_PATH = REPO_ROOT / "data" / "processed" / "unified_dataset.csv"
 DEFAULT_MODEL_PATH = BACKEND_DIR / "ml" / "models" / "best_model.pkl"
 DEFAULT_RESULTS_PATH = BACKEND_DIR / "ml" / "models" / "comparison_results.json"
+DEFAULT_METADATA_PATH = BACKEND_DIR / "ml" / "models" / "training_metadata.json"
 
 METRIC = "f1_macro"
 CV_FOLDS = 5
 CV_SAMPLE_LIMIT = 25000
+
+TRANSFER_NOTES = {
+    "logistic_regression": "Baseline lineal; reutilizable como referencia/calibrador, no como fine-tuning incremental principal.",
+    "decision_tree": "No incremental; sus hiperparametros y reglas sirven como baseline interpretable.",
+    "random_forest": "Puede extender arboles con warm_start, pero no es transferencia clinica estricta.",
+    "gradient_boosting": "Soporta warm_start para agregar etapas, util como baseline de boosting clasico.",
+    "xgboost": "Permite continuar entrenamiento usando el booster previo con xgb_model.",
+    "lightgbm": "Modelo seleccionado; permite continuar entrenamiento con init_model y conserva compatibilidad SHAP.",
+    "catboost": "Permite continuar entrenamiento con init_model en flujos CatBoost.",
+    "svm": "No incremental en sklearn; se conserva como baseline kernel.",
+    "knn": "Modelo basado en instancias; no tiene parametros aprendidos transferibles mas alla del set/base de referencia.",
+    "mlp": "Puede reutilizar pesos con warm_start o partial_fit en escenarios controlados.",
+}
 
 
 def build_model_registry(strict_external: bool = False) -> dict[str, Any]:
@@ -93,6 +108,7 @@ def train_all_models(
     dataset_path: Path = DEFAULT_DATASET_PATH,
     model_path: Path = DEFAULT_MODEL_PATH,
     results_path: Path = DEFAULT_RESULTS_PATH,
+    metadata_path: Path = DEFAULT_METADATA_PATH,
     strict_external: bool = False,
     only_models: list[str] | None = None,
 ) -> dict[str, Any]:
@@ -100,6 +116,7 @@ def train_all_models(
     _validate_dataset(data)
     train_frame, validation_frame, test_frame = _split_frames(data)
     train_balanced = _balance_training_frame(train_frame)
+    split_summary = _split_summary(data, train_frame, train_balanced, validation_frame, test_frame)
     x_train, y_train = train_balanced[FEATURES], train_balanced[TARGET].astype(int)
     x_validation, y_validation = validation_frame[FEATURES], validation_frame[TARGET].astype(int)
     x_test, y_test = test_frame[FEATURES], test_frame[TARGET].astype(int)
@@ -175,6 +192,9 @@ def train_all_models(
     }
     results_path.parent.mkdir(parents=True, exist_ok=True)
     results_path.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+    metadata = build_training_metadata(report, registry, bundle, split_summary)
+    metadata_path.parent.mkdir(parents=True, exist_ok=True)
+    metadata_path.write_text(json.dumps(metadata, indent=2, ensure_ascii=False), encoding="utf-8")
     return report
 
 
@@ -218,6 +238,125 @@ def _balance_training_frame(train: pd.DataFrame) -> pd.DataFrame:
     return pd.concat(parts, ignore_index=True).sample(frac=1, random_state=42)
 
 
+def _split_summary(
+    data: pd.DataFrame,
+    train_frame: pd.DataFrame,
+    train_balanced: pd.DataFrame,
+    validation_frame: pd.DataFrame,
+    test_frame: pd.DataFrame,
+) -> dict[str, Any]:
+    return {
+        "raw_rows": int(len(data)),
+        "train_rows_raw": int(len(train_frame)),
+        "train_rows_balanced": int(len(train_balanced)),
+        "validation_rows": int(len(validation_frame)),
+        "test_rows": int(len(test_frame)),
+        "class_distribution": {
+            "raw": _class_distribution(data),
+            "train_raw": _class_distribution(train_frame),
+            "train_balanced": _class_distribution(train_balanced),
+            "validation": _class_distribution(validation_frame),
+            "test": _class_distribution(test_frame),
+        },
+    }
+
+
+def _class_distribution(frame: pd.DataFrame) -> dict[str, int]:
+    counts = frame[TARGET].astype(int).value_counts().sort_index()
+    return {str(int(label)): int(count) for label, count in counts.items()}
+
+
+def build_training_metadata(
+    report: dict[str, Any],
+    registry: dict[str, Any],
+    bundle: dict[str, Any],
+    split_summary: dict[str, Any],
+) -> dict[str, Any]:
+    best_model_name = str(report["best_model"])
+    return {
+        "trained_at": report["trained_at"],
+        "dataset_path": _repo_path(Path(report["dataset_path"])),
+        "selection_metric": report["selection_metric"],
+        "best_model": best_model_name,
+        "best_model_artifact": _repo_path(DEFAULT_MODEL_PATH),
+        "results_artifact": _repo_path(DEFAULT_RESULTS_PATH),
+        "feature_columns": FEATURES,
+        "target_column": TARGET,
+        "target_mapping": {"0": "low", "1": "moderate", "2": "high", "3": "critical"},
+        "training_protocol": {
+            "random_state": 42,
+            "cv_folds": CV_FOLDS,
+            "cv_sample_limit": CV_SAMPLE_LIMIT,
+            "resampling": "SMOTE on training split only",
+            "preprocessing": ["SimpleImputer(strategy='median')", "StandardScaler()"],
+            "model_selection_rule": "highest validation f1_macro; test split is retained as final holdout",
+        },
+        "split_summary": split_summary,
+        "model_parameters": {
+            name: _model_parameter_record(name, estimator, best_model_name)
+            for name, estimator in registry.items()
+            if estimator is not None
+        },
+        "best_model_details": _best_model_details(bundle),
+        "model_results": report["results"],
+    }
+
+
+def _model_parameter_record(model_name: str, estimator: Any, best_model_name: str) -> dict[str, Any]:
+    return {
+        "class": f"{estimator.__class__.__module__}.{estimator.__class__.__name__}",
+        "init_params": _json_safe(estimator.get_params()) if hasattr(estimator, "get_params") else {},
+        "trained_pipeline_artifact": _repo_path(DEFAULT_MODEL_PATH) if model_name == best_model_name else None,
+        "transfer_learning_note": TRANSFER_NOTES.get(model_name, "No transfer note registered."),
+    }
+
+
+def _best_model_details(bundle: dict[str, Any]) -> dict[str, Any]:
+    pipeline = bundle["model"]
+    estimator = pipeline.named_steps["model"]
+    details = {
+        "model_name": bundle["model_name"],
+        "trained_at": bundle["trained_at"],
+        "pipeline_steps": list(pipeline.named_steps.keys()),
+        "estimator_class": f"{estimator.__class__.__module__}.{estimator.__class__.__name__}",
+        "estimator_params": _json_safe(estimator.get_params()) if hasattr(estimator, "get_params") else {},
+    }
+    booster = getattr(estimator, "booster_", None)
+    if booster is not None:
+        details["booster"] = {
+            "params": _json_safe(getattr(booster, "params", {})),
+            "num_trees": int(booster.num_trees()) if hasattr(booster, "num_trees") else None,
+            "num_model_per_iteration": (
+                int(booster.num_model_per_iteration()) if hasattr(booster, "num_model_per_iteration") else None
+            ),
+        }
+    return details
+
+
+def _json_safe(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    if hasattr(value, "item"):
+        try:
+            return value.item()
+        except Exception:
+            pass
+    return str(value)
+
+
+def _repo_path(path: Path) -> str:
+    try:
+        return str(path.resolve().relative_to(REPO_ROOT.resolve()))
+    except ValueError:
+        return str(path)
+
+
 def _cross_validate(pipeline: Pipeline, x_train: pd.DataFrame, y_train: pd.Series):
     min_count = int(y_train.value_counts().min())
     folds = min(CV_FOLDS, min_count)
@@ -256,6 +395,7 @@ def main() -> None:
     parser.add_argument("--dataset", type=Path, default=DEFAULT_DATASET_PATH)
     parser.add_argument("--model-output", type=Path, default=DEFAULT_MODEL_PATH)
     parser.add_argument("--results-output", type=Path, default=DEFAULT_RESULTS_PATH)
+    parser.add_argument("--metadata-output", type=Path, default=DEFAULT_METADATA_PATH)
     parser.add_argument("--strict-external", action="store_true")
     parser.add_argument("--models", nargs="*")
     args = parser.parse_args()
@@ -263,6 +403,7 @@ def main() -> None:
         dataset_path=args.dataset,
         model_path=args.model_output,
         results_path=args.results_output,
+        metadata_path=args.metadata_output,
         strict_external=args.strict_external,
         only_models=args.models,
     )

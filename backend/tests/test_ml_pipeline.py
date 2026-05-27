@@ -57,17 +57,20 @@ class MlPipelineTest(unittest.TestCase):
             dataset_path = tmp_path / "unified_dataset.csv"
             model_path = tmp_path / "best_model.pkl"
             results_path = tmp_path / "comparison_results.json"
+            metadata_path = tmp_path / "training_metadata.json"
             data = generate_synthetic_dataset(rows=180)
             unified, _ = split_and_balance_dataset(data, dataset_path, tmp_path / "train_resampled.csv")
             report = train_all_models(
                 dataset_path=dataset_path,
                 model_path=model_path,
                 results_path=results_path,
+                metadata_path=metadata_path,
                 only_models=["logistic_regression"],
             )
 
             self.assertTrue(model_path.exists())
             self.assertTrue(results_path.exists())
+            self.assertTrue(metadata_path.exists())
             self.assertEqual(report["best_model"], "logistic_regression")
             self.assertEqual(len(unified), 180)
 
