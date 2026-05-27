@@ -5,10 +5,12 @@ from unittest.mock import patch
 from api.routes.telegram import resolve_webhook_url
 from bot.handlers import (
     BotDependencies,
+    build_carmen_free_text_response,
     build_raw_message_from_draft,
     format_latest_status_message,
     format_vital_history_message,
     help_message,
+    looks_like_document_id,
     looks_like_vital_report,
 )
 from bot.telegram_bot import build_application, send_monitoring_reminders
@@ -90,6 +92,24 @@ class BotSprint4Test(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIn("120/80", history)
         self.assertTrue(looks_like_vital_report("Presión 130/85, pulso 80"))
+        self.assertTrue(looks_like_document_id("1002652750"))
+
+    def test_carmen_free_text_responses_are_conversational(self):
+        profile = {"id": "patient-1", "full_name": "Carlos Orrego", "role": "patient"}
+
+        identity = build_carmen_free_text_response("eres carmen?", profile)
+        self.assertIn("soy Carmen", identity)
+        self.assertIn("cuenta vinculada", identity)
+
+        greeting = build_carmen_free_text_response("hola", profile)
+        self.assertIn("Soy Carmen", greeting)
+        self.assertIn("Cuéntame cómo te sientes", greeting)
+
+        emergency = build_carmen_free_text_response("me ahogo y tengo dolor en el pecho", profile)
+        self.assertIn("llama al 123", emergency)
+
+        unlinked = build_carmen_free_text_response("hola")
+        self.assertIn("vincular tu cuenta", unlinked)
 
     def test_build_raw_message_from_guided_draft(self):
         raw_message = build_raw_message_from_draft(

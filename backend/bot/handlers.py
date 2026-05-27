@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import unicodedata
 from dataclasses import dataclass
 from typing import Any
 
@@ -233,7 +234,7 @@ async def oxygen_step(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         value = parse_optional_number(
             _message_text(update),
             label="saturación de oxígeno",
-            minimum=50,
+            minimum=1,
             maximum=100,
         )
     except ValueError as exc:
@@ -241,7 +242,17 @@ async def oxygen_step(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         return OXYGEN
     if value is not None:
         _draft(context)["oxygen_saturation"] = value
-    await _reply(update, "¿Cómo está tu glucosa hoy? Si no la tienes, escribe 'no medí'.")
+    next_question = "¿Cómo está tu glucosa hoy? Si no la tienes, escribe 'no medí'."
+    if value is not None and float(value) < 88:
+        await _reply(
+            update,
+            "Gracias por decírmelo. Esa saturación está en rango de alarma. "
+            "Si el oxímetro marcó bien o tienes ahogo, labios morados, dolor en el pecho, "
+            "confusión o mucho decaimiento, llama al 123 o ve a urgencias ahora.\n\n"
+            f"{next_question}",
+        )
+        return GLUCOSE
+    await _reply(update, next_question)
     return GLUCOSE
 
 
@@ -314,6 +325,10 @@ async def document_or_free_text_message(update: Update, context: ContextTypes.DE
         return
     text = _message_text(update)
     profile = await _linked_profile(update, context, deps)
+    if not profile and looks_like_document_id(text):
+        context.user_data["awaiting_document"] = True
+        await link_document_message(update, context, deps)
+        return
     if profile and looks_like_vital_report(text):
         await _reply(update, "Recibí tus signos. Estoy analizándolos...")
         state = await process_vital_report(
@@ -324,10 +339,13 @@ async def document_or_free_text_message(update: Update, context: ContextTypes.DE
         )
         await _reply(update, state.get("final_response", "Recibí tus datos."))
         return
-    await _reply(
-        update,
-        "Estoy aquí para ayudarte con tu monitoreo. Usa /vitales para registrar signos o /ayuda para ver comandos.",
-    )
+    latest_prediction = None
+    recent_vitals: list[dict[str, Any]] = []
+    if profile and wants_status_context(text):
+        latest_prediction = await deps.repository.get_latest_risk_prediction(str(profile["id"]))
+    if profile and wants_history_context(text):
+        recent_vitals = await deps.repository.get_recent_vital_signs(str(profile["id"]), limit=5)
+    await _reply(update, build_carmen_free_text_response(text, profile, latest_prediction, recent_vitals))
 
 
 async def link_document_message(
@@ -460,6 +478,122 @@ def looks_like_vital_report(text: str) -> bool:
     )
 
 
+def looks_like_document_id(text: str) -> bool:
+    compact = text.strip().replace(".", "").replace("-", "").replace(" ", "")
+    return compact.isdigit() and 5 <= len(compact) <= 15
+
+
+def wants_status_context(text: str) -> bool:
+    normalized = _normalize_text(text)
+    return any(
+        phrase in normalized
+        for phrase in (
+            "como estoy",
+            "como voy",
+            "mi estado",
+            "estado",
+            "riesgo",
+            "nivel",
+            "resultado",
+            "ultima prediccion",
+            "ultima medicion",
+        )
+    )
+
+
+def wants_history_context(text: str) -> bool:
+    normalized = _normalize_text(text)
+    return any(phrase in normalized for phrase in ("historial", "ultimas", "mediciones", "registros anteriores"))
+
+
+def build_carmen_free_text_response(
+    text: str,
+    profile: dict[str, Any] | None = None,
+    latest_prediction: dict[str, Any] | None = None,
+    recent_vitals: list[dict[str, Any]] | None = None,
+) -> str:
+    normalized = _normalize_text(text)
+    first_name = _first_name(profile)
+    emergency_lead = f"{first_name}, te leo." if first_name else "Te leo."
+
+    if _mentions_emergency(normalized):
+        return (
+            f"{emergency_lead} Si esto está pasando ahora mismo, no esperes mi respuesta: "
+            "llama al 123 o ve a urgencias, especialmente si hay dolor fuerte en el pecho, "
+            "dificultad para respirar, desmayo, confusión, debilidad en un lado del cuerpo "
+            "o problemas para hablar.\n\n"
+            "Si puedes hacerlo sin retrasar la atención, usa /emergencia para avisar también a tu equipo de salud."
+        )
+
+    if _contains_any(normalized, ("eres carmen", "sos carmen", "quien eres", "quien sos", "como te llamas")):
+        account_note = (
+            " Ya tengo tu cuenta vinculada, así que puedo mirar tu historial cuando lo necesites."
+            if profile
+            else " Para mirar tu historial real, primero necesito vincular tu cuenta con /start."
+        )
+        return (
+            f"Sí{', ' + first_name if first_name else ''}, soy Carmen, la enfermera virtual de HomecareCCV. "
+            "Estoy aquí para acompañarte con el monitoreo en casa, ayudarte a registrar signos vitales "
+            "y explicarte las alertas en palabras claras. No reemplazo a tu médico, pero sí puedo ayudarte "
+            f"a ordenar la información y avisar cuando algo requiere atención.{account_note}"
+        )
+
+    if profile is None:
+        return (
+            "Hola, soy Carmen, la enfermera virtual de HomecareCCV. "
+            "Para cuidar tus datos y acompañarte con tu historial real, primero necesito vincular tu cuenta. "
+            "Envíame tu número de documento o usa /start y lo hacemos juntos."
+        )
+
+    if recent_vitals:
+        return (
+            f"Claro, {first_name}. Esto es lo último que tengo registrado:\n\n"
+            f"{format_vital_history_message(recent_vitals)}\n\n"
+            "Si quieres, también podemos actualizar tus datos de hoy."
+        )
+
+    if wants_status_context(text):
+        if latest_prediction:
+            return (
+                f"Claro, {first_name}. Te cuento lo último que tengo:\n\n"
+                f"{format_latest_status_message(latest_prediction)}\n\n"
+                "Si algo cambió en cómo te sientes, cuéntamelo o registra nuevos signos."
+            )
+        return (
+            f"{first_name}, todavía no tengo una predicción reciente para tu cuenta. "
+            "Si tienes tus signos a la mano, me los puedes escribir en una frase, por ejemplo: "
+            "presión 120/80, pulso 75, saturación 97, glucosa 110. También puedo guiarte paso a paso con /vitales."
+        )
+
+    if _is_greeting(normalized):
+        return (
+            f"Hola, {first_name}. Soy Carmen. Me alegra leerte.\n\n"
+            "Cuéntame cómo te sientes hoy o mándame tus signos vitales si ya los tienes. "
+            "Si prefieres que te acompañe paso a paso, empezamos con /vitales."
+        )
+
+    if _contains_any(normalized, ("gracias", "muchas gracias", "mil gracias")):
+        return (
+            f"Con gusto, {first_name}. Aquí estoy para acompañarte. "
+            "Cuando quieras revisar tus signos, tu estado o registrar una nueva medición, me escribes."
+        )
+
+    if _contains_any(normalized, ("que puedes hacer", "que haces", "ayudame", "ayuda", "comandos")):
+        return (
+            f"Puedo ayudarte con varias cosas, {first_name}: registrar signos vitales, revisar tu último riesgo, "
+            "mostrar mediciones recientes y activar una alerta si te sientes en emergencia.\n\n"
+            "También puedes hablarme en lenguaje natural. Por ejemplo: "
+            "\"me siento mareado\" o \"presión 130/85, pulso 78\"."
+        )
+
+    return (
+        f"Te leo, {first_name}. Puedo conversar contigo sobre cómo te sientes y ayudarte a registrar tus signos, "
+        "pero no debo diagnosticar ni cambiar tratamientos.\n\n"
+        "Si tienes una medición, escríbemela en una frase: presión 120/80, pulso 75, saturación 97. "
+        "Si lo que tienes es un síntoma, cuéntamelo con tus palabras."
+    )
+
+
 async def _linked_profile(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -518,6 +652,47 @@ def _chat_id(update: Update) -> int:
     if update.effective_chat is None:
         raise ValueError("Telegram update without chat.")
     return int(update.effective_chat.id)
+
+
+def _first_name(profile: dict[str, Any] | None) -> str:
+    if not profile:
+        return ""
+    full_name = str(profile.get("full_name") or "").strip()
+    return full_name.split()[0] if full_name else ""
+
+
+def _normalize_text(value: str) -> str:
+    normalized = unicodedata.normalize("NFD", value.strip().lower())
+    return "".join(character for character in normalized if unicodedata.category(character) != "Mn")
+
+
+def _contains_any(text: str, phrases: tuple[str, ...]) -> bool:
+    return any(phrase in text for phrase in phrases)
+
+
+def _is_greeting(text: str) -> bool:
+    return text in {"hola", "buenas", "buenos dias", "buenas tardes", "buenas noches", "hey", "holi"}
+
+
+def _mentions_emergency(text: str) -> bool:
+    emergency_phrases = (
+        "dolor en el pecho",
+        "pecho apretado",
+        "no puedo respirar",
+        "me ahogo",
+        "ahogo",
+        "desmayo",
+        "me desmaye",
+        "confusion",
+        "cara torcida",
+        "no puedo hablar",
+        "hablo raro",
+        "debilidad en un lado",
+        "se me durmio un lado",
+        "convulsion",
+        "labios morados",
+    )
+    return _contains_any(text, emergency_phrases)
 
 
 def _format_pressure(row: dict[str, Any]) -> str:

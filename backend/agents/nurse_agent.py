@@ -281,7 +281,7 @@ def validate_vital_signs(vital_signs: dict[str, Any]) -> list[str]:
         "systolic_bp": (50, 260, "presión sistólica"),
         "diastolic_bp": (30, 160, "presión diastólica"),
         "heart_rate": (25, 220, "frecuencia cardíaca"),
-        "oxygen_saturation": (50, 100, "saturación de oxígeno"),
+        "oxygen_saturation": (1, 100, "saturación de oxígeno"),
         "temperature": (30, 43, "temperatura"),
         "glucose": (20, 600, "glucosa"),
         "pain_score": (0, 10, "dolor"),
