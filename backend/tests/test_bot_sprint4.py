@@ -1,5 +1,8 @@
 import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
 
+from api.routes.telegram import resolve_webhook_url
 from bot.handlers import (
     BotDependencies,
     build_raw_message_from_draft,
@@ -38,6 +41,22 @@ class FakeBot:
 class FakeApplication:
     def __init__(self):
         self.bot = FakeBot()
+
+
+class FakeUrl:
+    def __init__(self, value):
+        self.value = value
+        self.netloc = value.split("//", 1)[1].split("/", 1)[0]
+
+
+class FakeRequest:
+    def __init__(self, host):
+        self.url = FakeUrl(f"https://{host}/telegram/webhook/setup")
+
+    def url_for(self, route_name):
+        if route_name != "telegram_webhook":
+            raise KeyError(route_name)
+        return f"https://{self.url.netloc}/webhook"
 
 
 class BotSprint4Test(unittest.IsolatedAsyncioTestCase):
@@ -113,6 +132,21 @@ class BotSprint4Test(unittest.IsolatedAsyncioTestCase):
         }
         self.assertIn("123 Colombia", build_risk_email_html(payload))
         self.assertIn("Alerta", build_telegram_alert_message(payload))
+
+    def test_webhook_setup_prefers_current_railway_host_when_config_is_stale(self):
+        request = FakeRequest("homecare-production-3065.up.railway.app")
+        stale_settings = SimpleNamespace(telegram_webhook_url="https://homecare-ccv.up.railway.app/webhook")
+        with patch("api.routes.telegram.settings", stale_settings):
+            self.assertEqual(
+                resolve_webhook_url(request),
+                "https://homecare-production-3065.up.railway.app/webhook",
+            )
+
+    def test_webhook_setup_keeps_custom_configured_domain(self):
+        request = FakeRequest("homecare-production-3065.up.railway.app")
+        custom_settings = SimpleNamespace(telegram_webhook_url="https://api.homecareccv.co/webhook")
+        with patch("api.routes.telegram.settings", custom_settings):
+            self.assertEqual(resolve_webhook_url(request), "https://api.homecareccv.co/webhook")
 
 
 if __name__ == "__main__":
