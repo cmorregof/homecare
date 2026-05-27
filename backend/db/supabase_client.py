@@ -9,7 +9,7 @@ except ModuleNotFoundError:
 
 from config import settings
 
-PLACEHOLDER_MARKERS = ("xxxxx", "...", "eyJhbGciOiJIUzI1NiIs")
+PLACEHOLDER_MARKERS = ("xxxxx", "...")
 
 
 @lru_cache
@@ -27,4 +27,7 @@ def get_supabase_admin_client() -> Client:
 
 
 def _looks_placeholder(value: str) -> bool:
-    return any(marker in value for marker in PLACEHOLDER_MARKERS)
+    normalized = value.strip()
+    if not normalized:
+        return True
+    return any(marker in normalized for marker in PLACEHOLDER_MARKERS)
