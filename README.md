@@ -353,8 +353,8 @@ python3 scripts/check_env.py --target frontend --template frontend/.env.local.ex
 
 **Backend: Railway**
 
-- Root service: `backend/`
-- Container: `backend/Dockerfile`
+- Deployable from repository root.
+- Container: root `Dockerfile`, which packages `backend/`.
 - Health check: `/health`
 - Telegram webhook setup: `POST /telegram/webhook/setup`
 - CI workflow: `.github/workflows/backend_deploy.yml`

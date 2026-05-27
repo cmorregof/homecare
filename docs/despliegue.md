@@ -24,7 +24,9 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 
 ## 2. Backend en Railway
 
-Railway debe apuntar al directorio `backend/`. El servicio usa `backend/Dockerfile` y `backend/railway.json`.
+Railway puede apuntar a la raiz del repositorio. El archivo `railway.json` fuerza el builder `DOCKERFILE` y usa el `Dockerfile` de la raiz, que empaqueta el contenido de `backend/`.
+
+Si prefieres configurar Railway con root directory `backend/`, tambien existe `backend/railway.json` y `backend/Dockerfile`. Para evitar errores de Railpack en despliegues desde GitHub, la configuracion recomendada es raiz del repositorio + `railway.json`.
 
 Variables de Railway:
 
