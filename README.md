@@ -165,18 +165,20 @@ The ML pipeline unifies three public datasets into a common clinical schema,
 derives risk labels through MEWS-inspired rules, balances the training split
 with SMOTE, and evaluates 10 classical models.
 
-| Model | Validation F1 Macro | Test F1 Macro | Status |
-|---|---:|---:|---|
-| Logistic Regression | 0.7051 | 0.6860 | trained |
-| Decision Tree | 0.9724 | 0.9777 | trained |
-| Random Forest | 0.9837 | 0.9614 | trained |
-| Gradient Boosting | 0.9721 | 0.9674 | trained |
-| XGBoost | 0.9810 | 0.9785 | trained |
-| **LightGBM** | **0.9870** | **0.9733** | **selected** |
-| CatBoost | 0.9724 | 0.9772 | trained |
-| SVM | 0.6821 | 0.6502 | sampled training |
-| KNN | 0.6280 | 0.6220 | sampled training |
-| MLP | 0.9092 | 0.8961 | sampled training |
+| Model | Validation F1 Macro | Test F1 Macro | Train Rows | Status |
+|---|---:|---:|---:|---|
+| Logistic Regression | 0.7051 | 0.6860 | 155,912 | trained |
+| Decision Tree | 0.9724 | 0.9777 | 155,912 | trained |
+| Random Forest | 0.9837 | 0.9614 | 155,912 | trained |
+| Gradient Boosting | 0.9721 | 0.9674 | 155,912 | trained |
+| XGBoost | 0.9810 | 0.9785 | 155,912 | trained |
+| **LightGBM** | **0.9870** | **0.9733** | **155,912** | **selected** |
+| CatBoost | 0.9724 | 0.9772 | 155,912 | trained |
+| SVM | 0.8147 | 0.8229 | 155,912 | trained |
+| KNN | 0.6902 | 0.7282 | 155,912 | trained |
+| MLP | 0.9552 | 0.9561 | 155,912 | trained |
+
+All 10 models are trained on the same SMOTE-balanced training split.
 
 Selected artifact:
 

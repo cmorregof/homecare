@@ -31,9 +31,9 @@ El ETL genero `data/processed/unified_dataset.csv` con 76.028 filas y 21 feature
 | xgboost | trained | 0.9810 | 0.9785 | 155.912 |
 | lightgbm | trained | 0.9870 | 0.9733 | 155.912 |
 | catboost | trained | 0.9724 | 0.9772 | 155.912 |
-| svm | trained | 0.6821 | 0.6502 | 12.000 |
-| knn | trained | 0.6280 | 0.6220 | 12.000 |
-| mlp | trained | 0.9092 | 0.8961 | 12.000 |
+| svm | trained | 0.8147 | 0.8229 | 155.912 |
+| knn | trained | 0.6902 | 0.7282 | 155.912 |
+| mlp | trained | 0.9552 | 0.9561 | 155.912 |
 
 ## Modelo seleccionado
 
@@ -42,7 +42,9 @@ El modelo seleccionado por `f1_macro` de validacion fue `lightgbm`, serializado 
 - `backend/ml/models/best_model.pkl`
 - `backend/ml/models/comparison_results.json`
 
-Los modelos SVM, KNN y MLP usan una muestra estratificada de 12.000 filas para mantener el entrenamiento local reproducible. La validacion y el test se calculan contra los splits completos.
+Todos los modelos fueron entrenados con las mismas 155.912 filas del split de entrenamiento balanceado por SMOTE. La corrida anterior usaba 12.000 filas para SVM, KNN y MLP como optimizacion local, pero esa decision no era adecuada para el comparativo final porque introducia una diferencia metodologica entre modelos.
+
+La validacion y el test se calculan contra los splits completos. La validacion cruzada reportada en `comparison_results.json` usa una muestra estratificada de 25.000 filas como diagnostico auxiliar de estabilidad computacional; la seleccion del modelo ganador se hace por `f1_macro` de validacion.
 
 ## Reproducir
 

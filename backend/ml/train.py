@@ -32,8 +32,6 @@ DEFAULT_RESULTS_PATH = BACKEND_DIR / "ml" / "models" / "comparison_results.json"
 
 METRIC = "f1_macro"
 CV_FOLDS = 5
-EXPENSIVE_MODEL_TRAIN_LIMIT = 12000
-EXPENSIVE_MODELS = {"svm", "knn", "mlp"}
 CV_SAMPLE_LIMIT = 25000
 
 
@@ -123,7 +121,6 @@ def train_all_models(
                 }
             )
             continue
-        x_model_train, y_model_train = _training_frame_for_model(name, x_train, y_train)
         pipeline = Pipeline(
             steps=[
                 ("preprocess", Pipeline([("imputer", SimpleImputer(strategy="median")), ("scaler", StandardScaler())])),
@@ -131,13 +128,13 @@ def train_all_models(
             ]
         )
         try:
-            x_cv, y_cv = _cv_frame(x_model_train, y_model_train)
+            x_cv, y_cv = _cv_frame(x_train, y_train)
             cv_scores = _cross_validate(pipeline, x_cv, y_cv)
-            pipeline.fit(x_model_train, y_model_train)
+            pipeline.fit(x_train, y_train)
             result = {
                 "model": name,
                 "status": "trained",
-                "train_rows_used": int(len(x_model_train)),
+                "train_rows_used": int(len(x_train)),
                 "train_rows_available": int(len(x_train)),
                 "cv_rows_used": int(len(x_cv)),
                 "cv_f1_macro_mean": float(cv_scores.mean()) if len(cv_scores) else None,
@@ -228,20 +225,6 @@ def _cross_validate(pipeline: Pipeline, x_train: pd.DataFrame, y_train: pd.Serie
         return pd.Series(dtype=float).to_numpy()
     cv = StratifiedKFold(n_splits=folds, shuffle=True, random_state=42)
     return cross_val_score(pipeline, x_train, y_train, cv=cv, scoring=METRIC)
-
-
-def _training_frame_for_model(
-    model_name: str,
-    x_train: pd.DataFrame,
-    y_train: pd.Series,
-) -> tuple[pd.DataFrame, pd.Series]:
-    if model_name not in EXPENSIVE_MODELS or len(x_train) <= EXPENSIVE_MODEL_TRAIN_LIMIT:
-        return x_train, y_train
-    frame = x_train.copy()
-    frame[TARGET] = y_train.to_numpy()
-    per_class = max(1, EXPENSIVE_MODEL_TRAIN_LIMIT // frame[TARGET].nunique())
-    sampled = _sample_per_class(frame, per_class)
-    return sampled[FEATURES], sampled[TARGET].astype(int)
 
 
 def _cv_frame(x_train: pd.DataFrame, y_train: pd.Series) -> tuple[pd.DataFrame, pd.Series]:
