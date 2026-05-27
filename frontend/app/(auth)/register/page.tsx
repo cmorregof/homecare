@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { getAuthCallbackUrl } from "@/lib/site-url";
 import { createBrowserSupabaseClient, isSupabaseConfigured } from "@/lib/supabase";
 import type { UserRole } from "@/types";
 
@@ -27,20 +28,38 @@ export default function RegisterPage() {
     setLoading(true);
     try {
       const supabase = createBrowserSupabaseClient();
-      const { data, error } = await supabase.auth.signUp({ email, password });
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: getAuthCallbackUrl(),
+          data: {
+            full_name: fullName,
+            document_id: documentId,
+            role,
+          },
+        },
+      });
       if (error) {
         setMessage(error.message);
         return;
       }
-      if (data.user?.id) {
-        await supabase.from("profiles").insert({
+      if (data.session && data.user?.id) {
+        const { error: profileError } = await supabase.from("profiles").upsert({
           id: data.user.id,
           full_name: fullName,
           document_id: documentId,
           role,
         });
+        if (profileError) {
+          setMessage(profileError.message);
+          return;
+        }
       }
-      router.push("/login");
+      const params = new URLSearchParams({
+        message: "Revisa tu correo y confirma la cuenta para ingresar a HomecareCCV.",
+      });
+      router.push(`/login?${params.toString()}`);
     } finally {
       setLoading(false);
     }

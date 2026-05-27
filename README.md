@@ -261,7 +261,8 @@ cp backend/.env.example backend/.env
 # 3. Frontend environment
 cp frontend/.env.local.example frontend/.env.local
 # Fill in: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY,
-#          NEXT_PUBLIC_API_URL, NEXT_PUBLIC_TELEGRAM_BOT_URL
+#          NEXT_PUBLIC_API_URL, NEXT_PUBLIC_TELEGRAM_BOT_URL,
+#          NEXT_PUBLIC_SITE_URL
 
 # 4. Run local database + backend container
 docker compose up --build
@@ -370,7 +371,7 @@ python3 scripts/check_env.py --target frontend --template frontend/.env.local.ex
 | Service | Variables |
 |---|---|
 | Backend | `OPENAI_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `TELEGRAM_BOT_TOKEN`, `RESEND_API_KEY`, `FROM_EMAIL` |
-| Frontend | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_TELEGRAM_BOT_URL` |
+| Frontend | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_TELEGRAM_BOT_URL`, `NEXT_PUBLIC_SITE_URL` |
 | GitHub Actions | `RAILWAY_TOKEN`, `RAILWAY_SERVICE`, `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` |
 
 Full deployment instructions are in [`docs/despliegue.md`](docs/despliegue.md),

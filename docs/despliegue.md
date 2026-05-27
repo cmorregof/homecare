@@ -67,7 +67,14 @@ NEXT_PUBLIC_SUPABASE_URL=https://xxxxx.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 NEXT_PUBLIC_API_URL=https://<railway-domain>
 NEXT_PUBLIC_TELEGRAM_BOT_URL=https://t.me/project918_homecare_bot
+NEXT_PUBLIC_SITE_URL=https://<vercel-domain>
 ```
+
+En Supabase Auth > URL Configuration:
+
+- Site URL: `https://<vercel-domain>`
+- Redirect URL: `https://<vercel-domain>/auth/callback`
+- Redirect URL local opcional: `http://localhost:3000/auth/callback`
 
 Validaciones:
 
