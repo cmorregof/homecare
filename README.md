@@ -56,7 +56,7 @@ graph TB
         BOT["python-telegram-bot<br/>commands + guided intake"]
         NURSE["Agent 1: Carmen<br/>LangGraph nurse workflow"]
         DOCTOR["Agent 2: Doctor<br/>LangGraph + RAG"]
-        ML["ML Engine<br/>LightGBM + SHAP"]
+        ML["ML Engine<br/>real-outcome cohorts + SHAP"]
         ALERTS["Alert Service<br/>Telegram + Resend email"]
     end
 
@@ -122,9 +122,9 @@ and supports clinical follow-up without replacing medical judgment.
   `/estado`, `/historial`, `/ayuda`, and `/emergencia`.
 - **Guided vital-sign workflow:** blood pressure, heart rate, oxygen
   saturation, glucose, pain, dizziness, and dyspnea.
-- **Real ML model:** 76,028 unified Kaggle records, 21 clinical features,
-  SMOTE balancing, 10-model comparison, and LightGBM selected by validation
-  `f1_macro`.
+- **Validated ML cohorts:** real outcomes for stroke, cardiovascular disease,
+  and heart failure, with leakage guards, calibration, decision curves,
+  subgroup checks, bootstrap intervals, and SHAP.
 - **Explainable risk:** every prediction includes class probabilities,
   confidence score, SHAP values, and top risk factors.
 - **Clinical RAG:** guideline chunks stored in Supabase `pgvector`, retrieved
@@ -161,54 +161,42 @@ Detailed criteria are documented in
 
 ## 🧪 Machine Learning
 
-The ML pipeline unifies three public datasets into a common clinical schema,
-derives risk labels through MEWS-inspired rules, balances the training split
-with SMOTE, and evaluates 10 classical models.
+The validated research pipeline now uses **real clinical outcomes by cohort**
+instead of a synthetic `risk_level` target. The previous MEWS/Framingham rule is
+kept as an audited clinical baseline, not as the label learned by ML models.
 
-| Model | Val F1 Macro | Test F1 Macro | CV F1 Mean | Test ROC-AUC | Train Rows | Decision |
-|---|---:|---:|---:|---:|---:|---|
-| Logistic Regression | 0.7051 | 0.6860 | 0.8645 | 0.9877 | 155,912 | baseline |
-| Decision Tree | 0.9724 | 0.9777 | 0.9910 | 0.9885 | 155,912 | overfit-prone baseline |
-| Random Forest | 0.9837 | 0.9614 | 0.9947 | 0.9999 | 155,912 | strong baseline |
-| Gradient Boosting | 0.9721 | 0.9674 | 0.9939 | 0.9988 | 155,912 | strong baseline |
-| XGBoost | 0.9810 | 0.9785 | 0.9952 | 1.0000 | 155,912 | finalist |
-| **LightGBM** | **0.9870** | **0.9733** | **0.9954** | **0.9999** | **155,912** | **selected** |
-| CatBoost | 0.9724 | 0.9772 | 0.9952 | 0.9999 | 155,912 | finalist |
-| SVM | 0.8147 | 0.8229 | 0.8834 | 0.9928 | 155,912 | lower F1 |
-| KNN | 0.6902 | 0.7282 | 0.8805 | 0.9390 | 155,912 | lower F1 |
-| MLP | 0.9552 | 0.9561 | 0.9874 | 0.9998 | 155,912 | neural baseline |
+| Cohort | Real Outcome | Rows After Audit | Prevalence | Best Model | ROC-AUC | AUC-PR | Brier | Rule ROC-AUC | Δ Mean Net Benefit vs Rule |
+|---|---|---:|---:|---|---:|---:|---:|---:|---:|
+| Stroke | `stroke` | 4,253 | 5.8% | Logistic Regression | 0.771 | 0.138 | 0.059 | 0.576 | +0.0007 |
+| Cardiovascular | `cardio` | 68,651 | 49.5% | Gradient Boosting | 0.801 | 0.775 | 0.181 | 0.720 | +0.0251 |
+| Heart Failure | `HeartDisease` | 918 | 55.3% | CatBoost | 0.907 | 0.909 | 0.123 | 0.546 | +0.1013 |
 
-All 10 models are trained on the same SMOTE-balanced training split. LightGBM is
-selected because it has the highest validation `f1_macro`, the predefined
-selection metric. The test split is kept as a final holdout, so it is reported
-for transparency but not used to choose the winner.
+Why the metrics dropped: the old ~0.99 scores came from learning a deterministic
+rule-generated target. The new values are lower because they evaluate real
+dataset outcomes on held-out test splits. That is the scientifically valid
+result.
 
-Selected LightGBM parameters:
+Leakage guardrails:
 
-| Parameter | Value |
-|---|---:|
-| `boosting_type` | `gbdt` |
-| `n_estimators` | 200 |
-| `learning_rate` | 0.1 |
-| `num_leaves` | 31 |
-| `max_depth` | -1 |
-| `class_weight` | `balanced` |
-| `objective` | `multiclass` |
-| `num_class` | 4 |
-| `random_state` | 42 |
-| Trained trees | 800 |
+| Cohort | Removed Target-Derived Feature | Near-Constant Features Removed |
+|---|---|---|
+| Stroke | `stroke_history` | `heart_rate`, `oxygen_saturation`, `cholesterol_level`, `diabetes_history`, `alcohol_intake`, `physical_activity`, symptoms |
+| Cardiovascular | `heart_disease_history` | `heart_rate`, `oxygen_saturation`, `stroke_history`, symptoms |
+| Heart Failure | `heart_disease_history` | `oxygen_saturation`, `stroke_history`, `smoking_encoded`, `alcohol_intake`, symptoms, `bmi_category` |
 
-Selected artifact:
+Artifacts:
 
 ```text
-backend/ml/models/best_model.pkl
-backend/ml/models/comparison_results.json
-backend/ml/models/training_metadata.json
+backend/ml/models/real_outcomes/real_outcome_results.json
+backend/ml/models/real_outcomes/{stroke,cvd,heart_failure}/best_model.pkl
+backend/ml/models/real_outcomes/figures/*.png
+data/processed/real_outcomes/{stroke,cvd,heart_failure}.csv
+docs/notebooks/homecare_ml_real_outcomes.ipynb
 ```
 
-`training_metadata.json` stores model hyperparameters, split sizes, class
-distributions, feature schema, transfer-learning notes, and the fitted LightGBM
-booster details for future fine-tuning experiments.
+The operational Telegram risk endpoint still keeps the legacy rule-risk model
+available for four-level triage, but the main scientific ML report is now the
+real-outcome cohort evaluation.
 
 See [`docs/modelo_real.md`](docs/modelo_real.md) for reproducibility notes.
 

@@ -3,6 +3,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import pandas as pd
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
@@ -10,6 +12,7 @@ if str(REPO_ROOT) not in sys.path:
 from data.etl.unify_datasets import generate_synthetic_dataset, split_and_balance_dataset
 from ml.predict import predict_risk
 from ml.preprocessing import FEATURES, TARGET, normalize_feature_payload
+from ml.real_outcomes import prepare_cohort
 from ml.train import train_all_models
 
 
@@ -73,6 +76,43 @@ class MlPipelineTest(unittest.TestCase):
             self.assertTrue(metadata_path.exists())
             self.assertEqual(report["best_model"], "logistic_regression")
             self.assertEqual(len(unified), 180)
+
+    def test_real_outcome_cohort_removes_target_leakage_and_constants(self):
+        rows = []
+        for index in range(80):
+            outcome = int(index % 2 == 0)
+            row = {
+                feature: 1
+                for feature in FEATURES
+            }
+            row.update(
+                {
+                    "age": 45 + (index % 35),
+                    "gender_encoded": index % 2,
+                    "systolic_bp": 110 + (index % 40),
+                    "diastolic_bp": 70 + (index % 20),
+                    "glucose": 90 + (index % 30),
+                    "bmi": 22 + (index % 12),
+                    "hypertension_history": index % 3 == 0,
+                    "heart_disease_history": index % 5 == 0,
+                    "stroke_history": bool(outcome),
+                    "pulse_pressure": 40,
+                    "map": 93,
+                    "outcome": outcome,
+                    "clinical_rule_score": index % 8,
+                    "clinical_rule_risk_level": index % 4,
+                    "source_outcome": "stroke",
+                    "cohort": "stroke",
+                }
+            )
+            rows.append(row)
+
+        prepared = prepare_cohort("stroke", pd.DataFrame(rows))
+
+        self.assertTrue(prepared.leakage_passed)
+        self.assertIn("stroke_history", prepared.leakage_removed_features)
+        self.assertNotIn("stroke_history", prepared.features)
+        self.assertIn("oxygen_saturation", prepared.dropped_constant_features)
 
 
 if __name__ == "__main__":
