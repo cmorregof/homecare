@@ -32,12 +32,21 @@ backend/ml/models/comparison_results.json
 !backend/ml/models/best_model.pkl
 !backend/ml/models/comparison_results.json
 data/processed/*.csv
+data/interim/
+data/processed/
 data/raw/
 data/mock/healthcare-dataset-stroke-data.csv
 data/mock/cardio_train.csv
 data/mock/heart.csv
 data/mock/*.zip
 *.parquet
+*.pkl
+*.joblib
+*.pt
+*.pth
+*.ckpt
+mlruns/
+wandb/
 
 # OS and editor
 .DS_Store

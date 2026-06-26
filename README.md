@@ -414,6 +414,16 @@ longitudinal data from Atlántico is available.
 
 ---
 
+## CARMEN-Forecast: Anticipatory Care Layer
+
+CARMEN-Forecast is an experimental research extension of HomecareCCV focused on short-horizon deterioration forecasting. While the current operational system stratifies present risk from patient reports, CARMEN-Forecast studies whether recent longitudinal trajectories can estimate the probability of transition to high/critical risk in the next 6 hours.
+
+This module is designed for human-in-the-loop clinical prioritization, not autonomous diagnosis or treatment. It begins with synthetic longitudinal data and public clinical dataset loaders, and is intended to support future experiments with MIMIC-IV, MIMIC-IV-ED, HiRID, eICU, AmsterdamUMCdb, and eventually real HomecareCCV longitudinal data.
+
+See `backend/ml/carmen_forecast/README.md`.
+
+---
+
 ## 📚 Scientific Basis
 
 The project documentation cites clinical and technical references including:
