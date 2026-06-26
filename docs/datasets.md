@@ -8,16 +8,22 @@ Los datasets de entrenamiento deben descargarse manualmente desde Kaggle y ubica
 | Sulianova Cardiovascular Disease | `cardio_train.csv` | 70,000 | 12 | Riesgo cardiovascular, PA, colesterol, glucosa |
 | Fedesoriano Heart Failure Prediction | `heart.csv` | 918 | 12 | Complemento cardiovascular |
 
-## Flujo ETL previsto
+## Flujo ETL validado
 
 1. Cargar los tres archivos CSV.
 2. Normalizar nombres de columnas.
-3. Mapear variables al esquema clínico unificado.
+3. Mantener cada dataset como cohorte independiente.
 4. Crear variables derivadas.
-5. Asignar `risk_level` con reglas MEWS iniciales.
-6. Separar train, validation y test.
-7. Balancear la partición de entrenamiento con SMOTE si está disponible, o sobremuestreo aleatorio local como fallback.
-8. Guardar `data/processed/unified_dataset.csv` y `data/processed/train_resampled.csv`.
+5. Usar el desenlace real como target: `stroke`, `cardio` o `HeartDisease`.
+6. Eliminar la feature derivada del mismo desenlace para evitar leakage.
+7. Auditar columnas constantes/casi constantes por cohorte.
+8. Separar train, validation y test estratificados.
+9. Evaluar ML contra el score-regla MEWS/Framingham como baseline.
+10. Guardar `data/processed/real_outcomes/*.csv` y artefactos en `backend/ml/models/real_outcomes/`.
+
+El flujo antiguo `unified_dataset.csv` + `risk_level` sintético queda disponible
+solo como compatibilidad operativa/legacy para la estratificación de cuatro
+niveles del bot.
 
 Los archivos reales de Kaggle no se versionan por tamaño, licencia y trazabilidad.
 
@@ -26,7 +32,7 @@ Los archivos reales de Kaggle no se versionan por tamaño, licencia y trazabilid
 Con datasets reales:
 
 ```bash
-PYTHONPATH=backend python data/etl/unify_datasets.py
+PYTHONPATH=backend python -m ml.real_outcomes --bootstrap-iterations 200
 ```
 
 Smoke-test local sin Kaggle:

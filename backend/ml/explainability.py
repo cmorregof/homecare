@@ -7,7 +7,12 @@ import numpy as np
 from ml.preprocessing import FEATURES
 
 
-def compute_shap_values(model: object, feature_frame: Any) -> dict[str, float]:
+def compute_shap_values(
+    model: object,
+    feature_frame: Any,
+    feature_names: list[str] | None = None,
+) -> dict[str, float]:
+    names = feature_names or list(getattr(feature_frame, "columns", FEATURES))
     try:
         import shap
 
@@ -28,15 +33,20 @@ def compute_shap_values(model: object, feature_frame: Any) -> dict[str, float]:
             array = array[0, :, -1]
         elif array.ndim == 2:
             array = array[0]
-        shap_values = _as_feature_dict(array)
+        shap_values = _as_feature_dict(array, names)
         if not any(abs(value) > 1e-12 for value in shap_values.values()):
-            return compute_proxy_shap_values(model, feature_frame)
+            return compute_proxy_shap_values(model, feature_frame, names)
         return shap_values
     except Exception:
-        return compute_proxy_shap_values(model, feature_frame)
+        return compute_proxy_shap_values(model, feature_frame, names)
 
 
-def compute_proxy_shap_values(model: object, feature_frame: Any) -> dict[str, float]:
+def compute_proxy_shap_values(
+    model: object,
+    feature_frame: Any,
+    feature_names: list[str] | None = None,
+) -> dict[str, float]:
+    names = feature_names or list(getattr(feature_frame, "columns", FEATURES))
     estimator = model.named_steps.get("model") if hasattr(model, "named_steps") else model
     values = None
     if hasattr(estimator, "feature_importances_"):
@@ -46,8 +56,8 @@ def compute_proxy_shap_values(model: object, feature_frame: Any) -> dict[str, fl
         if values.ndim > 1:
             values = np.mean(np.abs(values), axis=0)
     if values is None or len(values) == 0:
-        values = np.zeros(len(FEATURES), dtype=float)
-    return _as_feature_dict(values)
+        values = np.zeros(len(names), dtype=float)
+    return _as_feature_dict(values, names)
 
 
 def top_risk_factors(shap_values: dict[str, float], features: dict[str, Any], limit: int = 5) -> list[dict[str, Any]]:
@@ -62,8 +72,9 @@ def top_risk_factors(shap_values: dict[str, float], features: dict[str, Any], li
     ]
 
 
-def _as_feature_dict(values: np.ndarray) -> dict[str, float]:
+def _as_feature_dict(values: np.ndarray, feature_names: list[str] | None = None) -> dict[str, float]:
+    names = feature_names or FEATURES
     flattened = np.ravel(values)
-    if len(flattened) < len(FEATURES):
-        flattened = np.pad(flattened, (0, len(FEATURES) - len(flattened)))
-    return {feature: float(flattened[index]) for index, feature in enumerate(FEATURES)}
+    if len(flattened) < len(names):
+        flattened = np.pad(flattened, (0, len(names) - len(flattened)))
+    return {feature: float(flattened[index]) for index, feature in enumerate(names)}

@@ -22,9 +22,21 @@ DATA_DIR = REPO_ROOT / "data" / "mock"
 PROCESSED_DIR = REPO_ROOT / "data" / "processed"
 UNIFIED_DATASET_PATH = PROCESSED_DIR / "unified_dataset.csv"
 TRAIN_RESAMPLED_PATH = PROCESSED_DIR / "train_resampled.csv"
+REAL_OUTCOME_DIR = PROCESSED_DIR / "real_outcomes"
 
 
 def assign_risk_level(row: dict[str, object] | pd.Series) -> int:
+    score = clinical_rule_score(row)
+    if score >= 7:
+        return 3
+    if score >= 5:
+        return 2
+    if score >= 3:
+        return 1
+    return 0
+
+
+def clinical_rule_score(row: dict[str, object] | pd.Series) -> int:
     score = 0
     systolic_bp = float(row.get("systolic_bp") or 0)
     glucose = float(row.get("glucose") or 0)
@@ -52,16 +64,15 @@ def assign_risk_level(row: dict[str, object] | pd.Series) -> int:
     if int(row.get("cholesterol_level") or 0) == 3:
         score += 1
 
-    if score >= 7:
-        return 3
-    if score >= 5:
-        return 2
-    if score >= 3:
-        return 1
-    return 0
+    return score
 
 
 def load_and_unify_datasets(data_dir: Path = DATA_DIR, allow_synthetic: bool = False) -> pd.DataFrame:
+    """Legacy synthetic-risk ETL kept for the operational rule-risk endpoint.
+
+    The research-valid ML pipeline uses `load_real_outcome_cohorts`, where
+    Kaggle outcomes stay as targets instead of being converted into features.
+    """
     frames = [
         _load_stroke_dataset(data_dir),
         _load_cardio_dataset(data_dir),
@@ -79,6 +90,34 @@ def load_and_unify_datasets(data_dir: Path = DATA_DIR, allow_synthetic: bool = F
     return finalize_unified_dataset(unified)
 
 
+def load_real_outcome_cohorts(data_dir: Path = DATA_DIR) -> dict[str, pd.DataFrame]:
+    loaders = {
+        "stroke": _load_stroke_dataset(data_dir, real_outcome=True),
+        "cvd": _load_cardio_dataset(data_dir, real_outcome=True),
+        "heart_failure": _load_heart_failure_dataset(data_dir, real_outcome=True),
+    }
+    cohorts: dict[str, pd.DataFrame] = {}
+    for cohort, frame in loaders.items():
+        if frame is not None and not frame.empty:
+            cohorts[cohort] = finalize_real_outcome_dataset(frame, cohort)
+    if not cohorts:
+        raise FileNotFoundError("No real Kaggle CSV files were found for real-outcome cohort evaluation.")
+    return cohorts
+
+
+def save_real_outcome_cohorts(
+    cohorts: dict[str, pd.DataFrame],
+    output_dir: Path = REAL_OUTCOME_DIR,
+) -> dict[str, Path]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    paths: dict[str, Path] = {}
+    for cohort, frame in cohorts.items():
+        path = output_dir / f"{cohort}.csv"
+        frame.to_csv(path, index=False)
+        paths[cohort] = path
+    return paths
+
+
 def finalize_unified_dataset(frame: pd.DataFrame) -> pd.DataFrame:
     records = []
     for row in frame.to_dict(orient="records"):
@@ -92,6 +131,35 @@ def finalize_unified_dataset(frame: pd.DataFrame) -> pd.DataFrame:
             unified[feature] = 0
     unified = unified[FEATURES + [TARGET]]
     return unified.dropna(subset=["systolic_bp", "diastolic_bp"]).reset_index(drop=True)
+
+
+def finalize_real_outcome_dataset(frame: pd.DataFrame, cohort: str) -> pd.DataFrame:
+    records = []
+    for row in frame.to_dict(orient="records"):
+        normalized = _with_defaults(row)
+        normalized = add_derived_features(normalized)
+        normalized["cohort"] = cohort
+        normalized["outcome"] = int(row.get("outcome") or 0)
+        normalized["source_outcome"] = str(row.get("source_outcome") or "unknown")
+        normalized["clinical_rule_score"] = clinical_rule_score(normalized)
+        normalized["clinical_rule_risk_level"] = assign_risk_level(normalized)
+        records.append(normalized)
+    output = pd.DataFrame(records)
+    for feature in FEATURES:
+        if feature not in output.columns:
+            output[feature] = 0
+    output = output[
+        [
+            "cohort",
+            "source_outcome",
+            "outcome",
+            "clinical_rule_score",
+            "clinical_rule_risk_level",
+            *FEATURES,
+        ]
+    ]
+    output = output.dropna(subset=["systolic_bp", "diastolic_bp", "outcome"]).reset_index(drop=True)
+    return _filter_plausible_clinical_rows(output).reset_index(drop=True)
 
 
 def split_and_balance_dataset(
@@ -154,19 +222,20 @@ def generate_synthetic_dataset(rows: int = 320, random_state: int = 42) -> pd.Da
     return finalize_unified_dataset(pd.DataFrame(records))
 
 
-def _load_stroke_dataset(data_dir: Path) -> pd.DataFrame | None:
+def _load_stroke_dataset(data_dir: Path, real_outcome: bool = False) -> pd.DataFrame | None:
     path = _first_existing(data_dir, ["healthcare-dataset-stroke-data.csv", "stroke_dataset.csv"])
     if path is None:
         return None
     raw = _read_csv(path)
     if _is_placeholder(raw):
         return None
+    outcome = _bool_series(raw.get("stroke"))
     frame = pd.DataFrame()
     frame["age"] = pd.to_numeric(raw.get("age"), errors="coerce")
     frame["gender_encoded"] = raw.get("gender", "").map({"Female": 0, "Male": 1, "Other": 0}).fillna(0).astype(int)
     frame["hypertension_history"] = _bool_series(raw.get("hypertension"))
     frame["heart_disease_history"] = _bool_series(raw.get("heart_disease"))
-    frame["stroke_history"] = _bool_series(raw.get("stroke"))
+    frame["stroke_history"] = False if real_outcome else outcome
     frame["diabetes_history"] = False
     frame["glucose"] = pd.to_numeric(raw.get("avg_glucose_level"), errors="coerce")
     frame["bmi"] = pd.to_numeric(raw.get("bmi"), errors="coerce")
@@ -181,18 +250,22 @@ def _load_stroke_dataset(data_dir: Path) -> pd.DataFrame | None:
     frame["alcohol_intake"] = False
     frame["physical_activity"] = True
     frame["pain_score"] = 0
-    frame["dizziness_score"] = frame["stroke_history"].astype(int) * 2
+    frame["dizziness_score"] = 0 if real_outcome else frame["stroke_history"].astype(int) * 2
     frame["dyspnea_score"] = 0
+    if real_outcome:
+        frame["outcome"] = outcome.astype(int)
+        frame["source_outcome"] = "stroke"
     return frame
 
 
-def _load_cardio_dataset(data_dir: Path) -> pd.DataFrame | None:
+def _load_cardio_dataset(data_dir: Path, real_outcome: bool = False) -> pd.DataFrame | None:
     path = _first_existing(data_dir, ["cardio_train.csv", "cardio_dataset.csv"])
     if path is None:
         return None
     raw = _read_csv(path)
     if _is_placeholder(raw):
         return None
+    outcome = _bool_series(raw.get("cardio"))
     frame = pd.DataFrame()
     frame["age"] = pd.to_numeric(raw.get("age"), errors="coerce") / 365.25
     frame["gender_encoded"] = pd.to_numeric(raw.get("gender"), errors="coerce").map({1: 0, 2: 1}).fillna(0).astype(int)
@@ -207,7 +280,7 @@ def _load_cardio_dataset(data_dir: Path) -> pd.DataFrame | None:
     frame["heart_rate"] = 78
     frame["oxygen_saturation"] = 97
     frame["hypertension_history"] = frame["systolic_bp"] >= 140
-    frame["heart_disease_history"] = _bool_series(raw.get("cardio"))
+    frame["heart_disease_history"] = False if real_outcome else outcome
     frame["stroke_history"] = False
     frame["diabetes_history"] = glucose_level >= 2
     frame["smoking_encoded"] = _bool_series(raw.get("smoke")).astype(int) * 2
@@ -215,17 +288,21 @@ def _load_cardio_dataset(data_dir: Path) -> pd.DataFrame | None:
     frame["physical_activity"] = _bool_series(raw.get("active"))
     frame["pain_score"] = 0
     frame["dizziness_score"] = 0
-    frame["dyspnea_score"] = frame["heart_disease_history"].astype(int)
+    frame["dyspnea_score"] = 0 if real_outcome else frame["heart_disease_history"].astype(int)
+    if real_outcome:
+        frame["outcome"] = outcome.astype(int)
+        frame["source_outcome"] = "cardio"
     return frame
 
 
-def _load_heart_failure_dataset(data_dir: Path) -> pd.DataFrame | None:
+def _load_heart_failure_dataset(data_dir: Path, real_outcome: bool = False) -> pd.DataFrame | None:
     path = _first_existing(data_dir, ["heart.csv", "heart_failure_dataset.csv"])
     if path is None:
         return None
     raw = _read_csv(path)
     if _is_placeholder(raw):
         return None
+    outcome = _bool_series(raw.get("HeartDisease"))
     frame = pd.DataFrame()
     frame["age"] = pd.to_numeric(raw.get("Age"), errors="coerce")
     frame["gender_encoded"] = raw.get("Sex", "").map({"F": 0, "M": 1}).fillna(0).astype(int)
@@ -240,7 +317,7 @@ def _load_heart_failure_dataset(data_dir: Path) -> pd.DataFrame | None:
     weight = 72 + frame["gender_encoded"] * 8
     frame["bmi"] = weight / ((height / 100) ** 2)
     frame["hypertension_history"] = frame["systolic_bp"] >= 140
-    frame["heart_disease_history"] = _bool_series(raw.get("HeartDisease"))
+    frame["heart_disease_history"] = False if real_outcome else outcome
     frame["stroke_history"] = False
     frame["diabetes_history"] = _bool_series(raw.get("FastingBS"))
     frame["smoking_encoded"] = 0
@@ -248,7 +325,10 @@ def _load_heart_failure_dataset(data_dir: Path) -> pd.DataFrame | None:
     frame["physical_activity"] = raw.get("ExerciseAngina", "").map({"N": True, "Y": False}).fillna(True)
     frame["pain_score"] = raw.get("ChestPainType", "").map({"ASY": 0, "ATA": 2, "NAP": 4, "TA": 6}).fillna(0)
     frame["dizziness_score"] = 0
-    frame["dyspnea_score"] = frame["heart_disease_history"].astype(int)
+    frame["dyspnea_score"] = 0 if real_outcome else frame["heart_disease_history"].astype(int)
+    if real_outcome:
+        frame["outcome"] = outcome.astype(int)
+        frame["source_outcome"] = "HeartDisease"
     return frame
 
 
@@ -306,6 +386,16 @@ def _balance_training_split(frame: pd.DataFrame, random_state: int) -> pd.DataFr
         for _, group in frame.groupby(TARGET, group_keys=False)
     ]
     return pd.concat(balanced_parts, ignore_index=True).sample(frac=1, random_state=random_state).reset_index(drop=True)
+
+
+def _filter_plausible_clinical_rows(frame: pd.DataFrame) -> pd.DataFrame:
+    return frame[
+        frame["age"].between(18, 110)
+        & frame["systolic_bp"].between(50, 260)
+        & frame["diastolic_bp"].between(30, 160)
+        & (frame["systolic_bp"] > frame["diastolic_bp"])
+        & frame["bmi"].between(10, 80)
+    ].copy()
 
 
 def _first_existing(data_dir: Path, names: list[str]) -> Path | None:

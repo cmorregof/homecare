@@ -1,77 +1,140 @@
-# Entrenamiento real del modelo ML
+# Modelo ML con outcomes reales por cohorte
 
-Este documento registra el entrenamiento real de Sprint 2 usando los tres datasets descargados desde Kaggle en `data/mock/`.
+Este documento reemplaza el reporte anterior basado en `risk_level` sintético.
+La corrida previa alcanzaba métricas cercanas a 0.99 porque el target era una
+regla determinista derivada de los mismos predictores. Esa evaluación no medía
+predicción clínica real; medía la capacidad del modelo de reaprender la regla.
 
-## Datos usados
+El diseño corregido conserva la regla MEWS/Framingham como **baseline clínico
+auditado**, pero el ML se entrena y evalúa contra desenlaces reales de cada
+dataset:
 
-| Dataset | Archivo local | Registros |
-| --- | --- | ---: |
-| Fedesoriano Stroke Prediction | `healthcare-dataset-stroke-data.csv` | 5.110 |
-| Sulianova Cardiovascular Disease | `cardio_train.csv` | 70.000 |
-| Fedesoriano Heart Failure Prediction | `heart.csv` | 918 |
+| Cohorte | Dataset | Outcome real | Registros tras auditoría | Prevalencia |
+| --- | --- | --- | ---: | ---: |
+| `stroke` | Fedesoriano Stroke Prediction | `stroke` | 4.253 | 5,8% |
+| `cvd` | Sulianova Cardiovascular Disease | `cardio` | 68.651 | 49,5% |
+| `heart_failure` | Fedesoriano Heart Failure | `HeartDisease` | 918 | 55,3% |
 
-El ETL genero `data/processed/unified_dataset.csv` con 76.028 filas y 21 features clinicas. Durante entrenamiento, el split de entrenamiento se balanceo con SMOTE hasta 155.912 filas.
+## Corrección de fuga de información
 
-## Entorno
+Los desenlaces reales ya no se convierten en features. En cada cohorte se aplica
+un guardarraíl explícito:
 
-- Python 3.12 en `.venv`
-- `numpy==1.26.4` por compatibilidad con CatBoost 1.2.7
-- `scikit-learn==1.5.2` por compatibilidad con XGBoost 2.1.3
-- `httpx==0.27.2` por compatibilidad con Supabase 2.10.0
-- En macOS se requiere `libomp` para XGBoost y LightGBM
+| Cohorte | Outcome | Feature derivada removida | Estado |
+| --- | --- | --- | --- |
+| `stroke` | `stroke` | `stroke_history` | Sin leakage |
+| `cvd` | `cardio` | `heart_disease_history` | Sin leakage |
+| `heart_failure` | `HeartDisease` | `heart_disease_history` | Sin leakage |
 
-## Resultado comparativo
+Además se eliminan columnas constantes o casi constantes por cohorte
+(`threshold=0.995`) porque varios signos vitales son imputaciones fijas en las
+fuentes públicas:
 
-| Modelo | Estado | F1 macro validacion | F1 macro test | CV F1 macro | ROC-AUC test | Filas entrenamiento |
-| --- | --- | ---: | ---: | ---: | ---: | ---: |
-| logistic_regression | trained | 0.7051 | 0.6860 | 0.8645 | 0.9877 | 155.912 |
-| decision_tree | trained | 0.9724 | 0.9777 | 0.9910 | 0.9885 | 155.912 |
-| random_forest | trained | 0.9837 | 0.9614 | 0.9947 | 0.9999 | 155.912 |
-| gradient_boosting | trained | 0.9721 | 0.9674 | 0.9939 | 0.9988 | 155.912 |
-| xgboost | trained | 0.9810 | 0.9785 | 0.9952 | 1.0000 | 155.912 |
-| lightgbm | trained | 0.9870 | 0.9733 | 0.9954 | 0.9999 | 155.912 |
-| catboost | trained | 0.9724 | 0.9772 | 0.9952 | 0.9999 | 155.912 |
-| svm | trained | 0.8147 | 0.8229 | 0.8834 | 0.9928 | 155.912 |
-| knn | trained | 0.6902 | 0.7282 | 0.8805 | 0.9390 | 155.912 |
-| mlp | trained | 0.9552 | 0.9561 | 0.9874 | 0.9998 | 155.912 |
+| Cohorte | Features removidas por constancia |
+| --- | --- |
+| `stroke` | `heart_rate`, `oxygen_saturation`, `cholesterol_level`, `diabetes_history`, `alcohol_intake`, `physical_activity`, `pain_score`, `dizziness_score`, `dyspnea_score` |
+| `cvd` | `heart_rate`, `oxygen_saturation`, `stroke_history`, `pain_score`, `dizziness_score`, `dyspnea_score` |
+| `heart_failure` | `oxygen_saturation`, `stroke_history`, `smoking_encoded`, `alcohol_intake`, `dizziness_score`, `dyspnea_score`, `bmi_category` |
 
-## Modelo seleccionado
+## Suite de evaluación
 
-El modelo seleccionado por `f1_macro` de validacion fue `lightgbm`, serializado en:
+Para cada cohorte/modelo se reporta:
 
-- `backend/ml/models/best_model.pkl`
-- `backend/ml/models/comparison_results.json`
-- `backend/ml/models/training_metadata.json`
+- ROC-AUC y AUC-PR.
+- Brier score, pendiente e intercepto de calibración.
+- Calibración Platt/isotónica seleccionada si mejora Brier en validación.
+- Curva de decisión con beneficio neto vs. tratar todos, tratar nadie y score-regla.
+- Comparación explícita ML vs. score-regla MEWS/Framingham.
+- Subgrupos por sexo y franjas de edad.
+- SHAP/top factores para el caso de mayor probabilidad en test.
+- Intervalos de confianza bootstrap en test.
+- Validación cruzada estratificada y test held-out.
 
-Todos los modelos fueron entrenados con las mismas 155.912 filas del split de entrenamiento balanceado por SMOTE. La corrida anterior usaba 12.000 filas para SVM, KNN y MLP como optimizacion local, pero esa decision no era adecuada para el comparativo final porque introducia una diferencia metodologica entre modelos.
+## Resultado principal por cohorte
 
-La validacion y el test se calculan contra los splits completos. La validacion cruzada reportada en `comparison_results.json` usa una muestra estratificada de 25.000 filas como diagnostico auxiliar de estabilidad computacional; la seleccion del modelo ganador se hace por `f1_macro` de validacion.
+| Cohorte | Mejor modelo | ROC-AUC test | AUC-PR test | Brier test | ROC regla | AUC-PR regla | Brier regla | Delta beneficio neto medio vs regla |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `stroke` | logistic_regression | 0,771 | 0,138 | 0,059 | 0,576 | 0,085 | 0,056 | +0,0007 |
+| `cvd` | gradient_boosting | 0,801 | 0,775 | 0,181 | 0,720 | 0,685 | 0,203 | +0,0251 |
+| `heart_failure` | catboost | 0,907 | 0,909 | 0,123 | 0,546 | 0,616 | 0,244 | +0,1013 |
 
-## Parametros guardados para transferencia
+## Comparativo completo por modelo
 
-`training_metadata.json` preserva:
+### Stroke
 
-- Hiperparametros iniciales de los 10 modelos.
-- Esquema de features y target.
-- Distribucion de clases por split.
-- Protocolo de preprocesamiento y SMOTE.
-- Notas de reutilizacion/fine-tuning por familia de modelo.
-- Detalles del booster LightGBM seleccionado.
+| Modelo | ROC-AUC validación | ROC-AUC test | AUC-PR test | Brier test | Calibración |
+| --- | ---: | ---: | ---: | ---: | --- |
+| logistic_regression | 0,849 | 0,771 | 0,138 | 0,059 | isotonic |
+| decision_tree | 0,511 | 0,568 | 0,081 | 0,054 | sigmoid |
+| random_forest | 0,727 | 0,738 | 0,122 | 0,052 | isotonic |
+| gradient_boosting | 0,800 | 0,755 | 0,122 | 0,053 | isotonic |
+| xgboost | 0,753 | 0,714 | 0,115 | 0,054 | isotonic |
+| lightgbm | 0,775 | 0,762 | 0,138 | 0,052 | isotonic |
+| catboost | 0,771 | 0,744 | 0,122 | 0,053 | isotonic |
+| svm | 0,849 | 0,779 | 0,143 | 0,058 | isotonic |
+| knn | 0,744 | 0,681 | 0,114 | 0,053 | isotonic |
+| mlp | 0,713 | 0,723 | 0,117 | 0,055 | isotonic |
 
-Parametros principales de LightGBM:
+La selección se hace por ROC-AUC de validación. Por eso `logistic_regression`
+queda como modelo seleccionado aunque `svm` tenga ROC-AUC de test ligeramente
+mayor; el test se conserva como evaluación final, no como criterio de selección.
 
-| Parametro | Valor |
-| --- | ---: |
-| `boosting_type` | `gbdt` |
-| `n_estimators` | 200 |
-| `learning_rate` | 0.1 |
-| `num_leaves` | 31 |
-| `max_depth` | -1 |
-| `class_weight` | `balanced` |
-| `objective` | `multiclass` |
-| `num_class` | 4 |
-| `random_state` | 42 |
-| Arboles entrenados | 800 |
+### Cardiovascular Disease
+
+| Modelo | ROC-AUC validación | ROC-AUC test | AUC-PR test | Brier test | Calibración |
+| --- | ---: | ---: | ---: | ---: | --- |
+| logistic_regression | 0,793 | 0,796 | 0,768 | 0,183 | isotonic |
+| decision_tree | 0,631 | 0,643 | 0,587 | 0,230 | sigmoid |
+| random_forest | 0,759 | 0,763 | 0,734 | 0,198 | isotonic |
+| gradient_boosting | 0,802 | 0,801 | 0,775 | 0,181 | isotonic |
+| xgboost | 0,789 | 0,793 | 0,766 | 0,184 | isotonic |
+| lightgbm | 0,801 | 0,800 | 0,773 | 0,181 | isotonic |
+| catboost | 0,800 | 0,801 | 0,775 | 0,181 | isotonic |
+| svm | 0,793 | 0,796 | 0,766 | 0,183 | isotonic |
+| knn | 0,780 | 0,780 | 0,752 | 0,189 | isotonic |
+| mlp | 0,766 | 0,759 | 0,725 | 0,199 | isotonic |
+
+### Heart Failure
+
+| Modelo | ROC-AUC validación | ROC-AUC test | AUC-PR test | Brier test | Calibración |
+| --- | ---: | ---: | ---: | ---: | --- |
+| logistic_regression | 0,869 | 0,856 | 0,871 | 0,149 | isotonic |
+| decision_tree | 0,762 | 0,759 | 0,734 | 0,181 | isotonic |
+| random_forest | 0,894 | 0,901 | 0,902 | 0,138 | isotonic |
+| gradient_boosting | 0,861 | 0,892 | 0,882 | 0,135 | isotonic |
+| xgboost | 0,850 | 0,893 | 0,890 | 0,141 | isotonic |
+| lightgbm | 0,862 | 0,887 | 0,894 | 0,138 | isotonic |
+| catboost | 0,895 | 0,907 | 0,909 | 0,123 | isotonic |
+| svm | 0,869 | 0,854 | 0,870 | 0,144 | isotonic |
+| knn | 0,871 | 0,895 | 0,895 | 0,134 | isotonic |
+| mlp | 0,863 | 0,861 | 0,855 | 0,155 | isotonic |
+
+## Artefactos versionados
+
+```text
+backend/ml/models/real_outcomes/real_outcome_results.json
+backend/ml/models/real_outcomes/stroke/best_model.pkl
+backend/ml/models/real_outcomes/cvd/best_model.pkl
+backend/ml/models/real_outcomes/heart_failure/best_model.pkl
+backend/ml/models/real_outcomes/figures/*.png
+data/processed/real_outcomes/stroke.csv
+data/processed/real_outcomes/cvd.csv
+data/processed/real_outcomes/heart_failure.csv
+docs/notebooks/homecare_ml_real_outcomes.ipynb
+```
+
+## Alineación TRIPOD+AI
+
+El reporte se alinea con TRIPOD+AI en los puntos relevantes para esta etapa:
+
+- Fuente de datos, cohortes y outcomes especificados.
+- Separación de entrenamiento, validación y test held-out.
+- Auditoría de leakage y predictores constantes.
+- Reporte de discriminación, calibración y utilidad clínica.
+- Comparación contra baseline clínico interpretable.
+- Evaluación por subgrupos.
+- Incertidumbre mediante bootstrap.
+- Explicabilidad con SHAP/top factores.
 
 ## Reproducir
 
@@ -79,7 +142,8 @@ Parametros principales de LightGBM:
 cd /Users/cmorregof/Personal/Contratista\ UNAL/Homecare/homecare-ccv
 python3.12 -m venv .venv
 .venv/bin/python -m pip install -r backend/requirements.txt
-PYTHONPATH=backend .venv/bin/python data/etl/unify_datasets.py
-cd backend
-PYTHONPATH=. ../.venv/bin/python -m ml.train
+PYTHONPATH=backend .venv/bin/python -m ml.real_outcomes --bootstrap-iterations 200
 ```
+
+El notebook de Colab reproduce el mismo flujo desde descarga de Kaggle hasta
+figuras y JSON final.

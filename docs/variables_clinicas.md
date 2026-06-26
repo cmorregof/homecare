@@ -25,9 +25,35 @@
 | `map` | Presión arterial media | derivada | diastólica + (pulso/3) |
 | `bmi_category` | Categoría de IMC | derivada | 0=bajo, 1=normal, 2=sobrepeso, 3=obeso |
 
+## Outcomes reales por cohorte
+
+El pipeline validado no usa un `risk_level` sintético como target principal.
+Cada dataset conserva su desenlace real:
+
+| Cohorte | Outcome real | Uso correcto | Feature prohibida por leakage |
+|---|---|---|---|
+| Stroke | `stroke` | Target binario | `stroke_history` |
+| Cardiovascular | `cardio` | Target binario | `heart_disease_history` |
+| Heart Failure | `HeartDisease` | Target binario | `heart_disease_history` |
+
+Estas columnas no se deben convertir en antecedentes clínicos dentro de la misma
+cohorte. Si se incluyen como features, el modelo aprende el desenlace ya
+observado y produce métricas artificialmente altas.
+
+## Variables constantes o casi constantes
+
+Algunas variables del esquema común son imputaciones fijas porque los datasets
+públicos no contienen signos vitales longitudinales completos. El pipeline real
+las audita por cohorte y las elimina si su frecuencia dominante es `>= 99,5%`.
+
+Los detalles quedan en
+`backend/ml/models/real_outcomes/real_outcome_results.json` bajo
+`constant_feature_audit`.
+
 ## Artefactos Sprint 2
 
 - `data/etl/unify_datasets.py`: unifica Stroke, Cardiovascular y Heart Failure a estas 22 features.
 - `backend/ml/preprocessing.py`: normaliza payloads de predicción y calcula variables derivadas.
-- `backend/ml/train.py`: entrena los 10 modelos definidos y selecciona por `f1_macro`.
+- `backend/ml/train.py`: conserva el pipeline legacy de riesgo sintético para compatibilidad operativa.
+- `backend/ml/real_outcomes.py`: entrena y evalúa modelos por cohorte contra outcomes reales.
 - `backend/ml/predict.py`: carga `best_model.pkl` una vez y responde el contrato de predicción en tiempo real.
