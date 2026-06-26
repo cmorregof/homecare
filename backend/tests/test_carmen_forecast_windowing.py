@@ -22,6 +22,13 @@ class CarmenForecastWindowingTest(unittest.TestCase):
         self.assertIn("systolic_bp__last", X.columns)
         self.assertIn("patient_id", metadata.columns)
 
+    def test_windowing_excludes_censored_horizons_by_default(self):
+        frame = generate_synthetic_carmen_data(n_patients=5, observations_per_patient=6, random_state=17)
+        X, y, metadata = make_prediction_windows(frame)
+        self.assertEqual(len(X), 25)
+        self.assertFalse(y.isna().any())
+        self.assertTrue(metadata["horizon_observed"].all())
+
     def test_patient_level_split_avoids_leakage(self):
         frame = generate_synthetic_carmen_data(n_patients=18, observations_per_patient=6, random_state=3)
         X, y, metadata = make_prediction_windows(frame)

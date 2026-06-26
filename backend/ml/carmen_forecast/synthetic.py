@@ -151,8 +151,13 @@ def generate_synthetic_carmen_data(
 
         for obs_index, row in enumerate(patient_rows):
             next_row = patient_rows[obs_index + 1] if obs_index + 1 < len(patient_rows) else None
-            future_deterioration = int(next_row is not None and next_row["risk_state"] in {"high", "critical"})
-            row["future_deterioration_6h"] = future_deterioration
+            horizon_observed = next_row is not None
+            row["horizon_observed"] = horizon_observed
+            row["is_censored"] = not horizon_observed
+            if horizon_observed:
+                row["future_deterioration_6h"] = int(next_row["risk_state"] in {"high", "critical"})
+            else:
+                row["future_deterioration_6h"] = np.nan
             rows.append(row)
 
     frame = pd.DataFrame(rows).sort_values(["patient_id", "timestamp"]).reset_index(drop=True)

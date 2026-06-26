@@ -32,10 +32,19 @@ class CarmenForecastSyntheticTest(unittest.TestCase):
             "previous_event_flag",
             "risk_state",
             "future_deterioration_6h",
+            "horizon_observed",
+            "is_censored",
         }
         self.assertTrue(expected.issubset(frame.columns))
         self.assertEqual(len(frame), 96)
         self.assertTrue(set(frame["risk_state"]).issubset({"low", "moderate", "high", "critical"}))
+
+    def test_last_observation_is_censored_not_negative(self):
+        frame = generate_synthetic_carmen_data(n_patients=4, observations_per_patient=5, random_state=13)
+        last_rows = frame.sort_values(["patient_id", "timestamp"]).groupby("patient_id").tail(1)
+        self.assertTrue(last_rows["future_deterioration_6h"].isna().all())
+        self.assertFalse(last_rows["horizon_observed"].any())
+        self.assertTrue(last_rows["is_censored"].all())
 
 
 if __name__ == "__main__":

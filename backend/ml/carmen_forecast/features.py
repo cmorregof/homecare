@@ -12,6 +12,8 @@ IDENTIFIER_COLUMNS = {
     "sex",
     "risk_state",
     "future_deterioration_6h",
+    "horizon_observed",
+    "is_censored",
 }
 
 
