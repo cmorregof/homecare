@@ -104,6 +104,7 @@ CREATE TABLE IF NOT EXISTS vital_signs (
   diastolic_bp NUMERIC,
   heart_rate NUMERIC,
   oxygen_saturation NUMERIC,
+  respiratory_rate NUMERIC,
   temperature NUMERIC,
   glucose NUMERIC,
   weight_kg NUMERIC,

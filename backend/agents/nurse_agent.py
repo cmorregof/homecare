@@ -248,13 +248,15 @@ def parse_vital_signs_message(message: str) -> dict[str, Any]:
         vital_signs["diastolic_bp"] = int(pressure_match.group(2))
 
     keyword_patterns = {
-        "heart_rate": r"(?:pulso|frecuencia|fc|cardiaca|cardíaca)\D{0,12}(\d{2,3})",
+        "heart_rate": r"(?:pulso|frecuencia cardiaca|frecuencia cardíaca|fc|cardiaca|cardíaca|frecuencia)\D{0,12}(\d{2,3})",
+        "respiratory_rate": r"(?:respiraciones por minuto|frecuencia respiratoria|respiraciones|respiracion|respiración)\D{0,14}(\d{1,2})",
         "oxygen_saturation": r"(?:saturacion|saturación|sat|oxigeno|oxígeno)\D{0,12}(\d{2,3})",
         "glucose": r"(?:glucosa|azucar|azúcar)\D{0,12}(\d{2,3})",
         "temperature": r"(?:temperatura|temp|fiebre)\D{0,12}(\d{2}(?:[\.,]\d)?)",
+        "weight_kg": r"(?:peso|pesé|pese)\D{0,12}(\d{2,3}(?:[\.,]\d)?)",
         "pain_score": r"(?:dolor)\D{0,12}(\d{1,2})",
         "dizziness_score": r"(?:mareo|mareos|inestabilidad)\D{0,12}(\d{1,2})",
-        "dyspnea_score": r"(?:disnea|respirar|respiracion|respiración|ahogo)\D{0,12}(\d{1,2})",
+        "dyspnea_score": r"(?:disnea|dificultad para respirar|respirar|ahogo)\D{0,12}(\d{1,2})",
     }
     for field, pattern in keyword_patterns.items():
         match = re.search(pattern, text)
@@ -282,7 +284,9 @@ def validate_vital_signs(vital_signs: dict[str, Any]) -> list[str]:
         "diastolic_bp": (30, 160, "presión diastólica"),
         "heart_rate": (25, 220, "frecuencia cardíaca"),
         "oxygen_saturation": (1, 100, "saturación de oxígeno"),
+        "respiratory_rate": (6, 50, "frecuencia respiratoria"),
         "temperature": (30, 43, "temperatura"),
+        "weight_kg": (25, 300, "peso"),
         "glucose": (20, 600, "glucosa"),
         "pain_score": (0, 10, "dolor"),
         "dizziness_score": (0, 10, "mareo"),
