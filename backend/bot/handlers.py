@@ -33,7 +33,19 @@ SUPPORTED_COMMANDS = [
     "/emergencia",
 ]
 
-CONFIRM_TENSIOMETER, BLOOD_PRESSURE, HEART_RATE, OXYGEN, GLUCOSE, PAIN, DIZZINESS, DYSPNEA = range(8)
+(
+    CONFIRM_TENSIOMETER,
+    RESPIRATORY_RATE,
+    HEART_RATE,
+    OXYGEN,
+    BLOOD_PRESSURE,
+    TEMPERATURE,
+    WEIGHT,
+    GLUCOSE,
+    PAIN,
+    DIZZINESS,
+    DYSPNEA,
+) = range(11)
 
 
 @dataclass
@@ -62,9 +74,12 @@ def register_handlers(application: Any, dependencies: BotDependencies | None = N
             ],
             states={
                 CONFIRM_TENSIOMETER: [MessageHandler(filters.TEXT & ~filters.COMMAND, confirm_tensiometer_step)],
-                BLOOD_PRESSURE: [MessageHandler(filters.TEXT & ~filters.COMMAND, blood_pressure_step)],
+                RESPIRATORY_RATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, respiratory_rate_step)],
                 HEART_RATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, heart_rate_step)],
                 OXYGEN: [MessageHandler(filters.TEXT & ~filters.COMMAND, oxygen_step)],
+                BLOOD_PRESSURE: [MessageHandler(filters.TEXT & ~filters.COMMAND, blood_pressure_step)],
+                TEMPERATURE: [MessageHandler(filters.TEXT & ~filters.COMMAND, temperature_step)],
+                WEIGHT: [MessageHandler(filters.TEXT & ~filters.COMMAND, weight_step)],
                 GLUCOSE: [MessageHandler(filters.TEXT & ~filters.COMMAND, glucose_step)],
                 PAIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, pain_step)],
                 DIZZINESS: [MessageHandler(filters.TEXT & ~filters.COMMAND, dizziness_step)],
@@ -195,10 +210,42 @@ async def confirm_tensiometer_step(update: Update, context: ContextTypes.DEFAULT
         return CONFIRM_TENSIOMETER
     await _reply(
         update,
-        "Perfecto. ¿Cuál es tu presión arterial? Escríbela así: 120/80",
+        "Perfecto. Siéntate y descansa 5 minutos antes de empezar.\n\n"
+        "Primero la respiración, sin moverte ni hablar: pon un cronómetro de 30 segundos y "
+        "cuenta cuántas veces respiras (una subida y bajada del pecho es una). "
+        "Escríbeme ese conteo de 30 segundos. Ejemplo: 8. Si no pudiste, escribe 'no medí'.",
         reply_markup=remove_keyboard(),
     )
-    return BLOOD_PRESSURE
+    return RESPIRATORY_RATE
+
+
+async def respiratory_rate_step(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    try:
+        count_30s = parse_optional_number(
+            _message_text(update),
+            label="respiraciones en 30 segundos",
+            minimum=3,
+            maximum=25,
+        )
+    except ValueError as exc:
+        await _reply(update, f"{exc} Recuerda: es el conteo de 30 segundos, normalmente entre 5 y 15.")
+        return RESPIRATORY_RATE
+    next_question = "Ahora ponte el oxímetro en el dedo, espera a que la cifra se estabilice y dime tu pulso. Ejemplo: 75"
+    if count_30s is not None:
+        per_minute = int(count_30s * 2)
+        _draft(context)["respiratory_rate"] = per_minute
+        if per_minute < 8 or per_minute > 28:
+            await _reply(
+                update,
+                f"Eso equivale a {per_minute} respiraciones por minuto, que está en rango de alarma. "
+                "Si tienes ahogo marcado, dolor en el pecho o mucho decaimiento, llama al 123 o ve a urgencias.\n\n"
+                f"{next_question}",
+            )
+            return HEART_RATE
+        await _reply(update, f"Anotado: {per_minute} respiraciones por minuto.\n\n{next_question}")
+        return HEART_RATE
+    await _reply(update, next_question)
+    return HEART_RATE
 
 
 async def blood_pressure_step(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -210,8 +257,49 @@ async def blood_pressure_step(update: Update, context: ContextTypes.DEFAULT_TYPE
     draft = _draft(context)
     draft["systolic_bp"] = systolic
     draft["diastolic_bp"] = diastolic
-    await _reply(update, "¿Cuál es tu frecuencia cardíaca o pulso? Ejemplo: 75")
-    return HEART_RATE
+    await _reply(
+        update,
+        "¿Cuál es tu temperatura en grados? Ejemplo: 36.8. Si no la mediste, escribe 'no medí'.",
+    )
+    return TEMPERATURE
+
+
+async def temperature_step(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    try:
+        value = parse_optional_number(
+            _message_text(update),
+            label="temperatura",
+            minimum=34,
+            maximum=42,
+        )
+    except ValueError as exc:
+        await _reply(update, str(exc))
+        return TEMPERATURE
+    if value is not None:
+        _draft(context)["temperature"] = value
+    await _reply(
+        update,
+        "¿Cuál es tu peso de hoy en kilos? Ejemplo: 68.5. "
+        "El peso se toma una vez al día, en la mañana; si ya lo reportaste hoy o no te has pesado, escribe 'no medí'.",
+    )
+    return WEIGHT
+
+
+async def weight_step(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    try:
+        value = parse_optional_number(
+            _message_text(update),
+            label="peso",
+            minimum=25,
+            maximum=300,
+        )
+    except ValueError as exc:
+        await _reply(update, str(exc))
+        return WEIGHT
+    if value is not None:
+        _draft(context)["weight_kg"] = value
+    await _reply(update, "¿Cómo está tu glucosa hoy? Si no la tienes, escribe 'no medí'.")
+    return GLUCOSE
 
 
 async def heart_rate_step(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -225,7 +313,7 @@ async def heart_rate_step(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     except ValueError as exc:
         await _reply(update, str(exc))
         return HEART_RATE
-    await _reply(update, "¿Tienes oxímetro? Si lo tienes, dime tu saturación. Ejemplo: 97. Si no, escribe 'no medí'.")
+    await _reply(update, "Sin quitarte el oxímetro, dime tu saturación de oxígeno. Ejemplo: 97. Si no tienes oxímetro, escribe 'no medí'.")
     return OXYGEN
 
 
@@ -242,7 +330,10 @@ async def oxygen_step(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         return OXYGEN
     if value is not None:
         _draft(context)["oxygen_saturation"] = value
-    next_question = "¿Cómo está tu glucosa hoy? Si no la tienes, escribe 'no medí'."
+    next_question = (
+        "Ahora la presión arterial: brazo apoyado en la mesa a la altura del corazón, "
+        "sin hablar durante la medición. Escríbela así: 120/80"
+    )
     if value is not None and float(value) < 88:
         await _reply(
             update,
@@ -251,9 +342,9 @@ async def oxygen_step(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
             "confusión o mucho decaimiento, llama al 123 o ve a urgencias ahora.\n\n"
             f"{next_question}",
         )
-        return GLUCOSE
+        return BLOOD_PRESSURE
     await _reply(update, next_question)
-    return GLUCOSE
+    return BLOOD_PRESSURE
 
 
 async def glucose_step(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -458,7 +549,10 @@ def build_raw_message_from_draft(draft: dict[str, Any]) -> str:
         f"pulso {draft.get('heart_rate')}",
     ]
     optional_labels = {
+        "respiratory_rate": "respiraciones por minuto",
         "oxygen_saturation": "saturación",
+        "temperature": "temperatura",
+        "weight_kg": "peso",
         "glucose": "glucosa",
         "pain_score": "dolor",
         "dizziness_score": "mareo",
