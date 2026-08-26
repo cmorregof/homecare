@@ -24,9 +24,7 @@ high-risk cases alert the assigned doctor by Telegram and email. A human
 clinician is always the final decision-maker.
 
 Research project **56031** (HomecareCCV), Universidad Nacional de Colombia —
-Sede Manizales, funded by **Minciencias**, with territorial focus on
-Atlántico, Colombia. Presented as poster **P100** at **AIiH 2026, Imperial
-College London**.
+Sede Manizales, funded by **Minciencias**, with territorial focus on Colombia.
 
 ---
 
