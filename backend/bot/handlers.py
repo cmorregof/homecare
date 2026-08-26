@@ -19,7 +19,7 @@ from bot.validators import (
 )
 from db.repository import HomecareRepository
 from notifications.email import send_risk_email_alert
-from notifications.telegram_alerts import send_telegram_risk_alert
+from notifications.telegram_alerts import send_telegram_message, send_telegram_risk_alert
 from utils.risk_levels import RISK_LEVELS, normalize_risk_level
 
 
@@ -110,7 +110,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     await _reply(
         update,
         "Hola, soy Carmen, la enfermera virtual de HomecareCCV.\n\n"
-        "Para vincular tu cuenta de Telegram, escríbeme tu número de documento de identidad.",
+        "Para empezar, escríbeme tu número de documento de identidad. "
+        "Si ya tienes cuenta la vinculo, y si no, te registro en un momento.",
     )
 
 
@@ -411,6 +412,9 @@ async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 async def document_or_free_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     deps = _deps(context)
+    if context.user_data.get("awaiting_registration_name"):
+        await register_new_patient_message(update, context, deps)
+        return
     if context.user_data.get("awaiting_document"):
         await link_document_message(update, context, deps)
         return
@@ -448,9 +452,14 @@ async def link_document_message(
     document_id = _message_text(update).strip()
     profile = await dependencies.repository.link_telegram_account(document_id, chat_id)
     if not profile:
+        context.user_data["awaiting_document"] = False
+        context.user_data["registration_document"] = document_id
+        context.user_data["awaiting_registration_name"] = True
         await _reply(
             update,
-            "No encontré una cuenta con ese documento. Revisa el número o pide apoyo a tu IPS para registrar tu perfil.",
+            "No encontré una cuenta con ese documento, pero puedo crearla ahora mismo.\n\n"
+            "Dime tu nombre completo (nombre y apellido) para registrarte, "
+            "o escribe \"cancelar\" si prefieres no hacerlo.",
         )
         return
     context.user_data["awaiting_document"] = False
@@ -459,6 +468,87 @@ async def link_document_message(
         update,
         f"Listo, {profile.get('full_name', '')}. Tu Telegram quedó vinculado.\n\n"
         "Para registrar signos vitales usa /vitales.",
+    )
+
+
+async def register_new_patient_message(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    dependencies: BotDependencies,
+) -> None:
+    text = _message_text(update)
+    if _normalize_text(text) in {"cancelar", "no", "no gracias", "no quiero"}:
+        context.user_data.pop("awaiting_registration_name", None)
+        context.user_data.pop("registration_document", None)
+        await _reply(
+            update,
+            "Listo, no creé ninguna cuenta. Cuando quieras registrarte, envíame tu documento de nuevo.",
+        )
+        return
+    if len(text.split()) < 2 or looks_like_document_id(text):
+        await _reply(
+            update,
+            "Para registrarte necesito tu nombre completo, por ejemplo: Ana María Pérez.",
+        )
+        return
+
+    document_id = str(context.user_data.get("registration_document") or "")
+    doctor = await pick_doctor_for_new_patient(dependencies.repository)
+    profile = await dependencies.repository.create_patient_account(
+        full_name=text.title(),
+        document_id=document_id,
+        telegram_chat_id=_chat_id(update),
+        assigned_doctor_id=str(doctor["id"]) if doctor else None,
+    )
+    if not profile:
+        await _reply(
+            update,
+            "No pude crear tu cuenta en este momento. Intenta de nuevo en unos minutos "
+            "o pide apoyo a tu IPS.",
+        )
+        return
+
+    context.user_data.pop("awaiting_registration_name", None)
+    context.user_data.pop("registration_document", None)
+    context.user_data["awaiting_document"] = False
+    _cache_profile(context, profile)
+    doctor_note = (
+        f"\nTu médico asignado es {doctor.get('full_name')}; recibirá tus alertas de riesgo."
+        if doctor
+        else ""
+    )
+    await _reply(
+        update,
+        f"¡Bienvenido/a, {profile.get('full_name', '')}! Tu cuenta quedó creada.{doctor_note}\n\n"
+        "Registra tus primeros signos vitales con /vitales.",
+    )
+    if doctor:
+        await notify_doctor_new_patient(doctor, profile)
+
+
+async def pick_doctor_for_new_patient(repository: HomecareRepository) -> dict[str, Any] | None:
+    doctors = await repository.get_doctor_roster()
+    if not doctors:
+        return None
+    ranked = []
+    for doctor in doctors:
+        count = await repository.count_assigned_patients(str(doctor["id"]))
+        ranked.append((count, doctor))
+    ranked.sort(key=lambda item: item[0])
+    return ranked[0][1]
+
+
+async def notify_doctor_new_patient(doctor: dict[str, Any], patient: dict[str, Any]) -> bool:
+    chat_id = doctor.get("telegram_chat_id")
+    if not chat_id:
+        return False
+    return await send_telegram_message(
+        chat_id=int(chat_id),
+        text=(
+            "HomecareCCV: nuevo paciente asignado.\n"
+            f"Paciente: {patient.get('full_name')} (doc. {patient.get('document_id')}).\n"
+            "Recibirás sus alertas de riesgo por este chat."
+        ),
     )
 
 
@@ -573,7 +663,9 @@ def looks_like_vital_report(text: str) -> bool:
 
 
 def looks_like_document_id(text: str) -> bool:
-    compact = text.strip().replace(".", "").replace("-", "").replace(" ", "")
+    compact = text.strip().lower().replace(".", "").replace("-", "").replace(" ", "")
+    if compact.startswith("cc"):
+        compact = compact[2:]
     return compact.isdigit() and 5 <= len(compact) <= 15
 
 

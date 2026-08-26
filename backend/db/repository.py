@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import secrets
 from typing import Any
 from uuid import uuid4
 
@@ -90,6 +91,70 @@ class HomecareRepository:
             return dict(update_result.data[0])
         profile["telegram_chat_id"] = telegram_chat_id
         return profile
+
+    async def get_doctor_roster(self) -> list[dict[str, Any]]:
+        client = self.client
+        if client is None:
+            return []
+        result = (
+            client.table("profiles")
+            .select("*")
+            .eq("role", "ips")
+            .order("created_at")
+            .execute()
+        )
+        return list(result.data or [])
+
+    async def count_assigned_patients(self, doctor_id: str) -> int:
+        client = self.client
+        if client is None:
+            return 0
+        result = (
+            client.table("profiles")
+            .select("id", count="exact")
+            .eq("role", "patient")
+            .eq("assigned_doctor_id", doctor_id)
+            .execute()
+        )
+        return int(result.count or 0)
+
+    async def create_patient_account(
+        self,
+        *,
+        full_name: str,
+        document_id: str,
+        telegram_chat_id: int,
+        assigned_doctor_id: str | None = None,
+    ) -> dict[str, Any] | None:
+        client = self.client
+        if client is None:
+            return None
+        email = f"paciente.{_document_slug(document_id)}@homecareccv.demo"
+        created = client.auth.admin.create_user(
+            {
+                "email": email,
+                "password": secrets.token_urlsafe(24),
+                "email_confirm": True,
+                "user_metadata": {"full_name": full_name, "document_id": document_id},
+            }
+        )
+        user = getattr(created, "user", None) or created
+        user_id = getattr(user, "id", None)
+        if user_id is None:
+            return None
+        payload = _filter_none(
+            {
+                "id": str(user_id),
+                "role": "patient",
+                "full_name": full_name,
+                "document_id": document_id,
+                "telegram_chat_id": telegram_chat_id,
+                "assigned_doctor_id": assigned_doctor_id,
+            }
+        )
+        result = client.table("profiles").insert(payload).execute()
+        rows = result.data or []
+        return rows[0] if rows else payload
 
     async def get_latest_risk_prediction(self, patient_id: str) -> dict[str, Any] | None:
         client = self.client
@@ -210,3 +275,8 @@ class HomecareRepository:
 
 def _filter_none(payload: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in payload.items() if value is not None}
+
+
+def _document_slug(document_id: str) -> str:
+    compact = "".join(character for character in document_id.lower() if character.isalnum())
+    return compact or uuid4().hex[:10]
