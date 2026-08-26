@@ -80,7 +80,7 @@ class AgentsFlowTest(unittest.IsolatedAsyncioTestCase):
             }
         )
         self.assertIn("Interpretación", report["interpretation"])
-        self.assertIn("Recomendaciones", report["recommendations"])
+        self.assertIn("No se recomienda modificar medicamentos", report["recommendations"])
         self.assertTrue(report["rag_sources"])
 
     async def test_complete_nurse_agent_flow_with_alert(self):
