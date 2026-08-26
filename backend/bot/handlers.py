@@ -558,8 +558,10 @@ async def pick_doctor_for_new_patient(repository: HomecareRepository) -> dict[st
     doctors = await repository.get_doctor_roster()
     if not doctors:
         return None
+    linked = [doctor for doctor in doctors if doctor.get("telegram_chat_id")]
+    candidates = linked or doctors
     ranked = []
-    for doctor in doctors:
+    for doctor in candidates:
         count = await repository.count_assigned_patients(str(doctor["id"]))
         ranked.append((count, doctor))
     ranked.sort(key=lambda item: item[0])

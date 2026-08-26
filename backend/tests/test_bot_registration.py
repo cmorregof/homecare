@@ -134,6 +134,18 @@ class BotRegistrationTest(unittest.IsolatedAsyncioTestCase):
         doctor = await pick_doctor_for_new_patient(repository)
         self.assertEqual(doctor["id"], "doc-pablo")
 
+    async def test_assignment_prefers_doctors_with_telegram_linked(self):
+        class PartiallyLinkedRepository(FakeRepository):
+            async def get_doctor_roster(self):
+                return [
+                    {"id": "doc-pablo", "full_name": "Pablo Benjumea", "telegram_chat_id": None, "role": "ips"},
+                    {"id": "doc-juan", "full_name": "Juan Camilo Arias", "telegram_chat_id": 222, "role": "ips"},
+                    {"id": "doc-carlos", "full_name": "Carlos Orrego", "telegram_chat_id": None, "role": "ips"},
+                ]
+
+        doctor = await pick_doctor_for_new_patient(PartiallyLinkedRepository())
+        self.assertEqual(doctor["id"], "doc-juan")
+
     def test_document_detection_accepts_cc_prefix(self):
         self.assertTrue(looks_like_document_id("cc123456"))
         self.assertTrue(looks_like_document_id("CC 1.234.567"))
