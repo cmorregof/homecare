@@ -156,6 +156,12 @@ at **6, 12, and 24 hours**.
   with its normalization, config, and provenance
   (`backend/ml/models/carmen_forecast_tfm_home6h.pt`; exporter in the
   research repo).
+- **Cold-start sanity check:** scored zero-shot on 384,839 MIMIC-IV-ED triage
+  visits (a single vital-sign snapshot, like a patient's first report), the
+  6/12/24 h scores reach AUROC 0.65 / 0.66 / 0.67 against a hard proxy
+  outcome (admission or death vs discharge home) and rank monotonically with
+  ESI acuity — real signal from the very first report, full power as 6-hour
+  history accumulates.
 - **Doctor-facing only.** The forecast is appended to the clinical report and
   never shown to the patient. When p(6h) ≥ 0.5 the assigned doctor gets a
   Telegram notice asking them to verify — a threshold chosen from the

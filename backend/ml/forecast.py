@@ -88,7 +88,7 @@ def _build_model(artifact: dict[str, Any]) -> Any:
 
             length = x.shape[1]
             tok = torch.cat([self.demo(demo).unsqueeze(1), self.inp(x)], dim=1)
-            pos = self.pos(torch.arange(length + 1)).unsqueeze(0)
+            pos = self.pos(torch.arange(length + 1, device=x.device)).unsqueeze(0)
             h = self.enc(tok + pos, src_key_padding_mask=pad)
             return self.head(h[:, 0])
 
