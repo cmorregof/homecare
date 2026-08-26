@@ -12,8 +12,9 @@ from agents.doctor_agent import DoctorAgent
 from agents.state import HomecareAgentState
 from config import settings
 from db.repository import HomecareRepository
+from ml.forecast import forecast_deterioration, format_forecast_note
 from notifications.email import send_risk_email_alert
-from notifications.telegram_alerts import send_telegram_risk_alert
+from notifications.telegram_alerts import send_telegram_message, send_telegram_risk_alert
 from utils.risk_levels import RISK_LEVELS, estimate_rule_based_risk, normalize_risk_level, should_alert_staff
 
 
@@ -102,6 +103,53 @@ class NurseAgent:
             "confidence_score": prediction_payload.get("confidence_score") or 0,
         }
 
+    async def compute_forecast(self, state: HomecareAgentState) -> HomecareAgentState:
+        if _has_blocking_validation_errors(state):
+            return state
+        forecast = None
+        try:
+            history = await self.repository.get_vital_history(state["patient_id"])
+            forecast = forecast_deterioration(history, state.get("patient_clinical_info", {}))
+        except Exception:
+            logger.exception("Fallo el cálculo de CARMEN-Forecast; se continúa sin pronóstico")
+        if forecast is None:
+            return {**state, "forecast": None}
+
+        probability_6h = float(forecast["probabilities"].get("6h") or 0)
+        if probability_6h >= settings.forecast_alert_threshold:
+            forecast["alert_sent_to_doctor"] = await self._notify_doctor_forecast(state, forecast)
+        return {**state, "forecast": forecast}
+
+    async def _notify_doctor_forecast(
+        self,
+        state: HomecareAgentState,
+        forecast: dict[str, Any],
+    ) -> bool:
+        try:
+            recipients = await _get_alert_recipients(self.repository, state["patient_id"])
+        except Exception:
+            logger.exception("No se pudieron resolver destinatarios para la alerta de Forecast")
+            return False
+        doctor_chat_id = recipients.get("doctor_telegram_chat_id")
+        if not doctor_chat_id:
+            logger.warning(
+                "Forecast sobre umbral para el paciente %s pero el médico no tiene Telegram vinculado",
+                state.get("patient_id"),
+            )
+            return False
+        patient = recipients.get("patient") or {}
+        probabilities = forecast["probabilities"]
+        message = (
+            "CARMEN-Forecast (preliminar) — requiere tu verificación.\n"
+            f"Paciente: {patient.get('full_name') or state['patient_id']}\n"
+            f"Probabilidad de deterioro clínico: 6h {probabilities.get('6h', 0):.0%} · "
+            f"12h {probabilities.get('12h', 0):.0%} · 24h {probabilities.get('24h', 0):.0%}\n"
+            f"Basado en {forecast.get('n_reports')} reportes ({forecast.get('hours_monitored')} h de monitoreo).\n"
+            "Modelo entrenado en UCI (MIMIC-IV), no validado en domicilio. "
+            "Revisa el historial y decide; este aviso NO fue enviado al paciente."
+        )
+        return await send_telegram_message(chat_id=int(doctor_chat_id), text=message)
+
     async def call_doctor_agent(self, state: HomecareAgentState) -> HomecareAgentState:
         if _has_blocking_validation_errors(state):
             return state
@@ -116,6 +164,10 @@ class NurseAgent:
                 "patient_clinical_info": state.get("patient_clinical_info", {}),
             }
         )
+        agent_response_full = report.get("agent_response_full", "")
+        forecast = state.get("forecast")
+        if forecast:
+            agent_response_full = f"{agent_response_full}\n\n{format_forecast_note(forecast)}"
         clinical_report_id = await self.repository.save_clinical_report(
             {
                 "patient_id": state["patient_id"],
@@ -125,13 +177,13 @@ class NurseAgent:
                 "recommendations": report.get("recommendations", ""),
                 "follow_up_actions": report.get("follow_up_actions", ""),
                 "rag_sources": report.get("rag_sources", []),
-                "agent_response_full": report.get("agent_response_full", ""),
+                "agent_response_full": agent_response_full,
             }
         )
         return {
             **state,
             "clinical_report_id": clinical_report_id,
-            "clinical_report": report.get("agent_response_full", ""),
+            "clinical_report": agent_response_full,
             "interpretation": report.get("interpretation", ""),
             "recommendations": report.get("recommendations", ""),
             "follow_up_actions": report.get("follow_up_actions", ""),

@@ -16,6 +16,7 @@ class FallbackHomecareGraph:
         state = await self.nurse_agent.validate_vitals(state)
         state = await self.nurse_agent.save_to_db(state)
         state = await self.nurse_agent.call_ml_script(state)
+        state = await self.nurse_agent.compute_forecast(state)
         state = await self.nurse_agent.call_doctor_agent(state)
         state = await self.nurse_agent.check_alert_needed(state)
         if state.get("alert_needed"):
@@ -39,6 +40,7 @@ def build_homecare_graph(nurse_agent: NurseAgent | None = None) -> Any:
     workflow.add_node("validate_vitals", agent.validate_vitals)
     workflow.add_node("save_to_db", agent.save_to_db)
     workflow.add_node("call_ml_script", agent.call_ml_script)
+    workflow.add_node("compute_forecast", agent.compute_forecast)
     workflow.add_node("call_doctor_agent", agent.call_doctor_agent)
     workflow.add_node("check_alert_needed", agent.check_alert_needed)
     workflow.add_node("send_alerts", agent.send_alerts)
@@ -48,7 +50,8 @@ def build_homecare_graph(nurse_agent: NurseAgent | None = None) -> Any:
     workflow.set_entry_point("validate_vitals")
     workflow.add_edge("validate_vitals", "save_to_db")
     workflow.add_edge("save_to_db", "call_ml_script")
-    workflow.add_edge("call_ml_script", "call_doctor_agent")
+    workflow.add_edge("call_ml_script", "compute_forecast")
+    workflow.add_edge("compute_forecast", "call_doctor_agent")
     workflow.add_edge("call_doctor_agent", "check_alert_needed")
     workflow.add_conditional_edges(
         "check_alert_needed",

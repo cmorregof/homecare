@@ -15,6 +15,7 @@ class HomecareAgentState(TypedDict, total=False):
     model_used: str
     confidence_score: float
     patient_clinical_info: dict[str, Any]
+    forecast: dict[str, Any] | None
     clinical_report: str
     interpretation: str
     recommendations: str

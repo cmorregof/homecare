@@ -36,6 +36,10 @@ class Settings:
 
     ml_api_url: str = os.getenv("ML_API_URL", "http://localhost:8000")
     ml_model_path: str = os.getenv("ML_MODEL_PATH", "backend/ml/models/best_model.pkl")
+    forecast_model_path: str = os.getenv(
+        "FORECAST_MODEL_PATH", "ml/models/carmen_forecast_tfm_home6h.pt"
+    )
+    forecast_alert_threshold: float = float(os.getenv("FORECAST_ALERT_THRESHOLD") or 0.5)
     rag_chunk_size: int = _int_env("RAG_CHUNK_SIZE", 500)
     rag_overlap: int = _int_env("RAG_OVERLAP", 50)
     monitoring_interval_hours: int = _int_env("MONITORING_INTERVAL_HOURS", 6)

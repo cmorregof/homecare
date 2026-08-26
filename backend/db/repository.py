@@ -186,6 +186,22 @@ class HomecareRepository:
         )
         return [dict(row) for row in (result.data or [])]
 
+    async def get_vital_history(self, patient_id: str, limit: int = 250) -> list[dict[str, Any]]:
+        client = self.client
+        if client is None:
+            return []
+        result = (
+            client.table("vital_signs")
+            .select("*")
+            .eq("patient_id", patient_id)
+            .order("recorded_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        rows = list(result.data or [])
+        rows.reverse()
+        return rows
+
     async def get_alert_recipients(self, patient_id: str) -> dict[str, Any]:
         client = self.client
         if client is None:
