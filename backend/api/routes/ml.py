@@ -25,6 +25,8 @@ class MlPredictResponse(BaseModel):
     shap_values: dict[str, float]
     top_risk_factors: list[dict[str, Any]]
     confidence_score: float
+    override_applied: bool = False
+    override_factors: list[dict[str, Any]] = Field(default_factory=list)
 
 
 @router.post("/predict", response_model=MlPredictResponse)
