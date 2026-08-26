@@ -116,6 +116,29 @@ and supports clinical follow-up without replacing medical judgment.
 
 ---
 
+## 🗣️ Conversational Agents — Language Design
+
+The system prompts of both conversational agents (nurse and physician) were
+designed using **aggregated statistics** — canonical clinical terms, standard
+abbreviations, negation patterns, and section lengths — derived from
+**CARMEN-I 1.0.1** (PhysioNet), with access granted under the **CENTINELA**
+project. The full style guide lives in
+[`docs/guia_estilo_carmen_i_v0.1.md`](docs/guia_estilo_carmen_i_v0.1.md).
+
+- **No text from the corpus is stored in this repository, reproduced in the
+  prompts, or sent to external services.** Only aggregate statistics inform
+  the prompt design.
+- The aggregates were generated locally with an anti-leak verifier.
+- The nurse agent uses the aggregates for *comprehension* (recognizing symptom
+  families, negations, severity modifiers, and abbreviations in patient
+  messages); her voice to the patient remains Colombian, warm, and free of
+  jargon. The physician agent uses them for *production* (clinical-note
+  structure, pertinent negatives, standard abbreviations).
+- A safety evaluation is in progress: 100 clinical vignettes, two blinded
+  phases, with a critical-miss endpoint.
+
+---
+
 ## 🚀 Key Features
 
 - **Telegram-first clinical intake:** `/start`, `/registro`, `/vitales`,
