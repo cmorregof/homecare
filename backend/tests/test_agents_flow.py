@@ -71,13 +71,14 @@ class AgentsFlowTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(parsed["dizziness_score"], 1)
 
     async def test_doctor_agent_fallback_report(self):
-        report = await DoctorAgent().generate_report(
+        report = DoctorAgent()._fallback_report(
             {
                 "vital_signs": {"systolic_bp": 165, "diastolic_bp": 95, "heart_rate": 88},
                 "risk_level": "high",
                 "risk_probability": 0.78,
                 "top_risk_factors": [{"feature": "systolic_bp"}],
-            }
+            },
+            [{"title": "Criterios MEWS", "source": "fallback_clinical_rules"}],
         )
         self.assertIn("Interpretación", report["interpretation"])
         self.assertIn("No se recomienda modificar medicamentos", report["recommendations"])
@@ -162,6 +163,39 @@ class AgentsFlowTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn(body["risk_level"], {"low", "moderate", "high", "critical"})
         self.assertIn("probabilities", body)
         self.assertIn("top_risk_factors", body)
+
+
+class FakeOpenAIClient:
+    def __init__(self, content):
+        from types import SimpleNamespace
+
+        self.captured = None
+
+        async def create(**kwargs):
+            self.captured = kwargs
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content=content))]
+            )
+
+        self.chat = SimpleNamespace(completions=SimpleNamespace(create=create))
+
+
+class DoctorOpenAIRequestTest(unittest.IsolatedAsyncioTestCase):
+    async def test_json_object_request_mentions_json_in_messages(self):
+        from agents.doctor_agent import DoctorAgent
+
+        fake = FakeOpenAIClient(
+            '{"interpretation": "i", "risk_evaluation": "r", '
+            '"recommendations": "rec", "follow_up_actions": "f"}'
+        )
+        agent = DoctorAgent(openai_client=fake)
+        report = await agent._generate_with_openai(
+            {"vital_signs": {"heart_rate": 80}, "risk_level": "low"}, []
+        )
+        self.assertEqual(report["interpretation"], "i")
+        user_content = fake.captured["messages"][1]["content"]
+        self.assertIn("JSON", user_content)
+        self.assertEqual(fake.captured["response_format"], {"type": "json_object"})
 
 
 if __name__ == "__main__":

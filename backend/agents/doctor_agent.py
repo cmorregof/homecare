@@ -72,7 +72,12 @@ class DoctorAgent:
                 {"role": "system", "content": system_prompt},
                 {
                     "role": "user",
-                    "content": json.dumps(user_payload, ensure_ascii=False),
+                    "content": (
+                        "Genera el reporte clínico como un objeto JSON con las claves "
+                        "interpretation, risk_evaluation, recommendations y follow_up_actions, "
+                        "a partir de estos datos:\n"
+                        + json.dumps(user_payload, ensure_ascii=False)
+                    ),
                 },
             ],
         )
