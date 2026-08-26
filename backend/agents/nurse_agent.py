@@ -23,16 +23,21 @@ MlPredictor = Callable[[dict[str, Any]], dict[str, Any] | Awaitable[dict[str, An
 logger = logging.getLogger(__name__)
 
 
+PatientVoice = Callable[[str, dict[str, Any], str], Awaitable[str]]
+
+
 class NurseAgent:
     def __init__(
         self,
         repository: HomecareRepository | None = None,
         doctor_agent: DoctorAgent | None = None,
         ml_predictor: MlPredictor | None = None,
+        voice: PatientVoice | None = None,
     ) -> None:
         self.repository = repository or HomecareRepository()
         self.doctor_agent = doctor_agent or DoctorAgent()
         self.ml_predictor = ml_predictor
+        self.voice = voice
 
     async def process_vital_report(self, state: HomecareAgentState) -> HomecareAgentState:
         from agents.graph import build_homecare_graph
@@ -265,6 +270,17 @@ class NurseAgent:
             f"Seguimiento:\n{state.get('follow_up_actions') or risk['action']}\n\n"
             "Recuerda: no cambies tus medicamentos sin indicación de tu médico tratante."
         )
+        if self.voice is not None:
+            response = await self.voice(
+                "respuesta_a_reporte_de_signos",
+                {
+                    "risk_level": risk_level,
+                    "risk_probability": probability,
+                    "alerta_enviada_al_equipo": bool(state.get("alert_sent")),
+                    "signos_vitales": state.get("vital_signs", {}),
+                },
+                response,
+            )
         return {**state, "final_response": response}
 
     async def respond_to_patient(self, state: HomecareAgentState) -> HomecareAgentState:

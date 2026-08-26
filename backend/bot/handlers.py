@@ -53,11 +53,18 @@ SUPPORTED_COMMANDS = [
 class BotDependencies:
     repository: HomecareRepository
     nurse_agent: NurseAgent
+    voice: Any | None = None
 
 
 def default_dependencies() -> BotDependencies:
+    from agents.nurse_voice import compose_patient_message
+
     repository = HomecareRepository()
-    return BotDependencies(repository=repository, nurse_agent=NurseAgent(repository=repository))
+    return BotDependencies(
+        repository=repository,
+        nurse_agent=NurseAgent(repository=repository, voice=compose_patient_message),
+        voice=compose_patient_message,
+    )
 
 
 def register_handlers(application: Any, dependencies: BotDependencies | None = None) -> None:
@@ -441,7 +448,18 @@ async def document_or_free_text_message(update: Update, context: ContextTypes.DE
         latest_prediction = await deps.repository.get_latest_risk_prediction(str(profile["id"]))
     if profile and wants_history_context(text):
         recent_vitals = await deps.repository.get_recent_vital_signs(str(profile["id"]), limit=5)
-    await _reply(update, build_carmen_free_text_response(text, profile, latest_prediction, recent_vitals))
+    draft = build_carmen_free_text_response(text, profile, latest_prediction, recent_vitals)
+    if deps.voice is not None and not _mentions_emergency(_normalize_text(text)):
+        draft = await deps.voice(
+            "conversacion_libre",
+            {
+                "mensaje_del_paciente": text,
+                "paciente": _first_name(profile),
+                "es_emergencia": False,
+            },
+            draft,
+        )
+    await _reply(update, draft)
 
 
 async def link_document_message(
