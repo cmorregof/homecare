@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+import logging
 import re
 from collections.abc import Awaitable, Callable
 from typing import Any
@@ -17,6 +18,8 @@ from utils.risk_levels import RISK_LEVELS, estimate_rule_based_risk, normalize_r
 
 
 MlPredictor = Callable[[dict[str, Any]], dict[str, Any] | Awaitable[dict[str, Any]]]
+
+logger = logging.getLogger(__name__)
 
 
 class NurseAgent:
@@ -231,7 +234,12 @@ class NurseAgent:
                 response = await client.post(f"{settings.ml_api_url.rstrip('/')}/ml/predict", json=payload)
                 response.raise_for_status()
                 return response.json()
-        except Exception:
+        except (httpx.HTTPError, ValueError) as exc:
+            logger.warning(
+                "API de ML no disponible (%s); se usa el fallback de reglas clínicas para el paciente %s",
+                exc,
+                state.get("patient_id"),
+            )
             return estimate_rule_based_risk(
                 state.get("vital_signs", {}),
                 state.get("patient_clinical_info", {}),

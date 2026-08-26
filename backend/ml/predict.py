@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -10,11 +11,13 @@ import pandas as pd
 from config import settings
 from ml.explainability import compute_shap_values, top_risk_factors
 from ml.preprocessing import FEATURES, RISK_LABELS, normalize_feature_payload, risk_class_to_label
-from utils.risk_levels import estimate_rule_based_risk, normalize_risk_level
+from utils.risk_levels import apply_hard_overrides, estimate_rule_based_risk, normalize_risk_level
 
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 REPO_ROOT = BACKEND_DIR.parent
+
+logger = logging.getLogger(__name__)
 
 
 def predict_risk(features: dict[str, Any], model_path: str | Path | None = None) -> dict[str, Any]:
@@ -23,7 +26,7 @@ def predict_risk(features: dict[str, Any], model_path: str | Path | None = None)
     if bundle is None:
         prediction = estimate_rule_based_risk(normalized_features, normalized_features)
         prediction["features_used"] = normalized_features
-        return prediction
+        return apply_hard_overrides(prediction, normalized_features)
 
     model = bundle["model"]
     feature_frame = pd.DataFrame([normalized_features], columns=FEATURES)
@@ -32,7 +35,7 @@ def predict_risk(features: dict[str, Any], model_path: str | Path | None = None)
     probabilities = _predict_probabilities(model, feature_frame)
     risk_probability = probabilities[risk_level]
     shap_values = compute_shap_values(model, feature_frame)
-    return {
+    prediction = {
         "risk_level": risk_level,
         "risk_probability": risk_probability,
         "probabilities": probabilities,
@@ -42,14 +45,49 @@ def predict_risk(features: dict[str, Any], model_path: str | Path | None = None)
         "confidence_score": _confidence_score(probabilities),
         "features_used": normalized_features,
     }
+    return apply_hard_overrides(prediction, normalized_features)
 
 
 @lru_cache
 def load_model_bundle(model_path: str) -> dict[str, Any] | None:
     path = Path(model_path)
     if not path.exists():
+        logger.warning(
+            "Bundle de ML no encontrado en %s; las predicciones usarán el fallback de reglas clínicas",
+            path,
+        )
         return None
-    return joblib.load(path)
+    try:
+        return joblib.load(path)
+    except Exception:
+        logger.exception(
+            "No se pudo cargar el bundle de ML en %s; las predicciones usarán el fallback de reglas clínicas",
+            path,
+        )
+        return None
+
+
+def validate_model_bundle(model_path: str | Path | None = None) -> bool:
+    resolved = _resolve_model_path(model_path)
+    bundle = load_model_bundle(str(resolved))
+    if bundle is None:
+        return False
+    bundle_features = list(bundle.get("features") or [])
+    if bundle_features != FEATURES:
+        logger.warning(
+            "Las features del bundle (%s) no coinciden con las esperadas (%s); "
+            "las predicciones del modelo no son confiables",
+            bundle_features,
+            FEATURES,
+        )
+        return False
+    logger.info(
+        "Bundle de ML validado: %s con %d features (%s)",
+        bundle.get("model_name", "best_model"),
+        len(bundle_features),
+        resolved,
+    )
+    return True
 
 
 def _predict_probabilities(model: Any, feature_frame: pd.DataFrame) -> dict[str, float]:
