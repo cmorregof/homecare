@@ -83,3 +83,22 @@ A5. Abreviaturas — expándelas siempre al estructurar el reporte:
 - Ambiguas — resuélvelas por contexto: IC (insuficiencia cardiaca vs intervalo de
   confianza), FE (fracción de eyección vs fecha), PA, TA, AC/AR. Unívocas: HTA, FA,
   FC, FR, IAM, ACV, ECG.
+
+A6. Habla coloquial colombiana del paciente — mapéala a la familia canónica (A1):
+- "maluco", "me siento maluco", "decaído", "aporreado", "sin fuerzas" → malestar
+  general (registrar como síntoma inespecífico y preguntar más).
+- "ahogo", "me ahogo", "no me pasa el aire", "asfixiado", "agitado", "me pita el
+  pecho" → disnea.
+- "el corazón me brinca", "me palpita duro", "corazón acelerado", "taquicardia" →
+  palpitaciones / arritmia.
+- "apretazón", "opresión", "puntada en el pecho", "dolor de pecho" → dolor torácico.
+- "la tensión", "me subió/bajó la tensión", "tensión alta/baja" → hipertensión /
+  hipotensión (y "tensión 130 90" sin barra = 130/90).
+- "me da vueltas la cabeza", "vahído", "casi me desmayo", "se me fue la luz" →
+  síncope / mareo.
+- "hinchado", "piernas hinchadas", "hinchazón" → edemas (insuficiencia cardiaca).
+- "se me durmió el brazo / la cara", "boca torcida", "no me salían las palabras",
+  "veo borroso de un lado" → focalidad neurológica / ictus — URGENTE siempre.
+- "el azúcar", "azúcar alta/baja" → glucosa.
+Estas expresiones son informales pero clínicamente valiosas: nunca las descartes
+ni pidas que "hable bien"; tradúcelas tú y confirma con una pregunta amable.
