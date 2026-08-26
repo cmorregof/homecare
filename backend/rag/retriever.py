@@ -67,9 +67,11 @@ class ClinicalRetriever:
     async def retrieve(self, query: str, match_count: int = 5) -> list[dict[str, Any]]:
         if settings.openai_api_key and self.client is not None:
             try:
-                return await self._retrieve_from_supabase(query, match_count)
+                rows = await self._retrieve_from_supabase(query, match_count)
+                if rows:
+                    return rows
             except Exception:
-                return self._retrieve_from_local_documents(query, match_count)
+                pass
         return self._retrieve_from_local_documents(query, match_count)
 
     async def _retrieve_from_supabase(self, query: str, match_count: int) -> list[dict[str, Any]]:
