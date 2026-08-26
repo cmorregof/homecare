@@ -468,16 +468,25 @@ async def link_document_message(
     dependencies: BotDependencies,
 ) -> None:
     chat_id = _chat_id(update)
-    document_id = _message_text(update).strip()
+    text = _message_text(update).strip()
+    document_id = text
+    pending_name: str | None = None
     if not looks_like_document_id(document_id):
-        await _reply(
-            update,
-            "Ese texto no parece un número de documento. Escríbeme solo tu documento, "
-            "por ejemplo: 1234567890 (o si te dieron uno tipo cc123456, tal cual).",
-        )
-        return
+        extracted = extract_document_id(text)
+        if extracted is None:
+            await _reply(
+                update,
+                "Ese texto no parece un número de documento. Escríbeme solo tu documento, "
+                "por ejemplo: 1234567890 (o si te dieron uno tipo cc123456, tal cual).",
+            )
+            return
+        document_id = extracted
+        pending_name = extract_full_name(text)
     profile = await dependencies.repository.link_telegram_account(document_id, chat_id)
     if not profile:
+        if pending_name:
+            await register_patient_account(update, context, dependencies, pending_name, document_id)
+            return
         context.user_data["awaiting_document"] = False
         context.user_data["registration_document"] = document_id
         context.user_data["awaiting_registration_name"] = True
@@ -539,6 +548,16 @@ async def register_new_patient_message(
         return
 
     document_id = str(context.user_data.get("registration_document") or "")
+    await register_patient_account(update, context, dependencies, full_name, document_id)
+
+
+async def register_patient_account(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    dependencies: BotDependencies,
+    full_name: str,
+    document_id: str,
+) -> None:
     doctor = await pick_doctor_for_new_patient(dependencies.repository)
     profile = await dependencies.repository.create_patient_account(
         full_name=full_name,
@@ -733,6 +752,7 @@ def extract_document_id(text: str) -> str | None:
 
 
 _NAME_NOISE = (
+    r"hola|buenas tardes|buenas noches|buenos dias|buenos días|buenas|"
     r"mi nombre es|me llamo|yo soy|soy|mi id es|mi id|mi documento es|mi documento|"
     r"mi cedula es|mi cédula es|nombre|documento|cedula|cédula|id|es|y"
 )

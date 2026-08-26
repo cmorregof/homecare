@@ -152,6 +152,17 @@ class BotRegistrationTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(looks_like_document_id("1234567"))
         self.assertFalse(looks_like_document_id("ana maria"))
 
+    async def test_natural_phrase_at_document_step_registers_in_one_turn(self):
+        repository = FakeRepository()
+        deps = BotDependencies(repository=repository, nurse_agent=None)
+        update = make_update("Hola, me llamo Carlos Manuel Orrego y mi cédula es 1002652750")
+        context = make_context({"awaiting_document": True})
+        await link_document_message(update, context, deps)
+        created = repository.created[0]
+        self.assertEqual(created["full_name"], "Carlos Manuel Orrego")
+        self.assertEqual(created["document_id"], "1002652750")
+        self.assertIn("Bienvenido", update.effective_message.replies[0])
+
     async def test_greeting_is_not_treated_as_document(self):
         deps = BotDependencies(repository=FakeRepository(), nurse_agent=None)
         update = make_update("Hola")
