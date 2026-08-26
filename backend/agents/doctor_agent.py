@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import Any
 
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, OpenAIError
 
 from config import settings
 from rag.retriever import ClinicalRetriever
@@ -12,6 +13,8 @@ from utils.risk_levels import RISK_LEVELS, normalize_risk_level
 
 
 PROMPT_PATH = Path(__file__).resolve().parent / "prompts" / "doctor_system.txt"
+
+logger = logging.getLogger(__name__)
 
 
 class DoctorAgent:
@@ -31,7 +34,11 @@ class DoctorAgent:
         if settings.openai_api_key:
             try:
                 return await self._generate_with_openai(payload, rag_sources)
-            except Exception:
+            except (OpenAIError, ValueError, KeyError) as exc:
+                logger.warning(
+                    "Generación con OpenAI falló (%s); se usa el reporte clínico de respaldo",
+                    exc,
+                )
                 return self._fallback_report(payload, rag_sources)
         return self._fallback_report(payload, rag_sources)
 

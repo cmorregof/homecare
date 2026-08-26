@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -6,7 +8,10 @@ from api.routes.ml import router as ml_router
 from api.routes.models import router as models_router
 from api.routes.telegram import router as telegram_router
 from config import settings
+from ml.predict import validate_model_bundle
 
+
+logging.basicConfig(level=logging.INFO)
 
 app = FastAPI(
     title="HomecareCCV API",
@@ -21,6 +26,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.on_event("startup")
+async def validate_ml_assets() -> None:
+    validate_model_bundle()
+
 
 app.include_router(agents_router)
 app.include_router(ml_router)

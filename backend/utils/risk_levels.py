@@ -65,6 +65,61 @@ def normalize_risk_level(value: str | int | None) -> str:
     return "low"
 
 
+def hard_override_tier(vital_signs: dict[str, object]) -> dict[str, object] | None:
+    factors: list[dict[str, object]] = []
+    systolic = _float_or_none(vital_signs.get("systolic_bp"))
+    heart_rate = _float_or_none(vital_signs.get("heart_rate"))
+    oxygen = _float_or_none(vital_signs.get("oxygen_saturation"))
+    glucose = _float_or_none(vital_signs.get("glucose"))
+
+    def add(feature: str, value: float, reason: str) -> None:
+        factors.append(
+            {
+                "feature": feature,
+                "value": value,
+                "points": 3,
+                "reason": reason,
+                "critical": True,
+            }
+        )
+
+    if systolic is not None and (systolic >= 180 or systolic < 80):
+        add("systolic_bp", systolic, "Umbral crítico de presión sistólica")
+    if heart_rate is not None and (heart_rate > 130 or heart_rate < 40):
+        add("heart_rate", heart_rate, "Frecuencia cardíaca crítica")
+    if oxygen is not None and oxygen < 88:
+        add("oxygen_saturation", oxygen, "Saturación de oxígeno crítica")
+    if glucose is not None and (glucose > 400 or glucose < 50):
+        add("glucose", glucose, "Glucosa crítica")
+
+    if not factors:
+        return None
+    return {"risk_level": "critical", "factors": factors}
+
+
+def apply_hard_overrides(
+    prediction: dict[str, object],
+    vital_signs: dict[str, object],
+) -> dict[str, object]:
+    override = hard_override_tier(vital_signs)
+    if override is None:
+        prediction.setdefault("override_applied", False)
+        return prediction
+
+    model_level = normalize_risk_level(str(prediction.get("risk_level") or "low"))
+    override_level = str(override["risk_level"])
+    prediction["override_applied"] = True
+    prediction["override_factors"] = override["factors"]
+    if RISK_ORDER[override_level] > RISK_ORDER[model_level]:
+        prediction["risk_level"] = override_level
+        probabilities = prediction.get("probabilities") or {}
+        current = float(probabilities.get(override_level, 0.0) or 0.0) if isinstance(probabilities, dict) else 0.0
+        prediction["risk_probability"] = max(current, 0.9)
+        existing_factors = list(prediction.get("top_risk_factors") or [])
+        prediction["top_risk_factors"] = list(override["factors"]) + existing_factors
+    return prediction
+
+
 def estimate_rule_based_risk(
     vital_signs: dict[str, object],
     clinical_info: dict[str, object] | None = None,
