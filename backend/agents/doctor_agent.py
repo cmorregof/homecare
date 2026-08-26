@@ -110,8 +110,8 @@ class DoctorAgent:
             f"{float(payload.get('risk_probability') or 0):.0%}. {factor_text}"
         )
         recommendations = (
-            "Recomendaciones: continuar el monitoreo, mantener reposo relativo mientras "
-            "se confirma estabilidad, verificar que la medición se haya tomado correctamente "
+            "Continuar el monitoreo, mantener reposo relativo mientras se confirma "
+            "estabilidad, verificar que la medición se haya tomado correctamente "
             "y seguir las indicaciones del equipo tratante. No se recomienda modificar "
             "medicamentos desde este sistema."
         )
