@@ -1,38 +1,44 @@
-# 🏥 HomecareCCV: AI Agents for Cardio-Cerebrovascular Home Monitoring
+<p align="center">
+  <img src="docs/assets/portada.png" alt="CARMEN — home monitoring in the Colombian Andes" width="100%" />
+</p>
 
-*A production-oriented digital health platform for remote monitoring of
-cardio-cerebrovascular patients, combining Telegram-based vital-sign intake,
-clinical LLM agents, real-time machine learning risk stratification, RAG over
-medical guidelines, and role-based clinical dashboards.*
+# CARMEN · HomecareCCV
 
-[![Repository](https://img.shields.io/badge/GitHub-homecare-181717?style=for-the-badge&logo=github)](https://github.com/cmorregof/homecare)
-[![Telegram Bot](https://img.shields.io/badge/Telegram-project918__homecare__bot-26A5E4?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/project918_homecare_bot)
+**Trustworthy, explainable multi-agent AI for cardio-cerebrovascular home
+monitoring and triage in low-resource settings** — named after the trusted
+caregiver whose vigilance it augments, not replaces.
+
+[![Telegram Bot](https://img.shields.io/badge/Try_it_live-project918__homecare__bot-26A5E4?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/project918_homecare_bot)
+[![Dashboard](https://img.shields.io/badge/Dashboard-homecare--bice--beta.vercel.app-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://homecare-bice-beta.vercel.app)
+[![AIiH 2026](https://img.shields.io/badge/AIiH_2026-Poster_P100-23373B?style=for-the-badge)](https://github.com/cmorregof/homecare)
 [![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-Backend-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![Next.js](https://img.shields.io/badge/Next.js-14-000000?style=for-the-badge&logo=nextdotjs)](https://nextjs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
+
+Patients report vital signs through Telegram every 6 hours — no app to
+install. A virtual nurse structures the report, a risk engine stratifies it
+into four action tiers with **deterministic hard safety overrides above any
+model**, a physician agent writes a guideline-grounded clinical report (RAG),
+a temporal transformer forecasts deterioration for the care team, and
+high-risk cases alert the assigned doctor by Telegram and email. A human
+clinician is always the final decision-maker.
+
+Research project **56031** (HomecareCCV), Universidad Nacional de Colombia —
+Sede Manizales, funded by **Minciencias**, with territorial focus on
+Atlántico, Colombia. Presented as poster **P100** at **AIiH 2026, Imperial
+College London**.
 
 ---
 
 ## 🎯 The Clinical Problem
 
-Cardiovascular disease is one of the leading causes of mortality in Colombia,
-and many post-stroke patients survive with permanent deficits that require
-continuous home care. In practice, clinical teams often receive late signals:
-subtle blood-pressure changes, hypoxemia, glucose excursions, dizziness,
-dyspnea, or neurological deterioration may evolve at home before anyone sees
-the trend.
-
-**HomecareCCV** turns the patient's home into a monitored clinical surface.
-Every 6 hours, patients report vital signs through Telegram. A virtual nurse
-agent structures the message, a trained ML model estimates risk, a doctor agent
-reviews the case with clinical context and RAG, and high-risk cases trigger
-multichannel alerts for the patient and the assigned care team.
-
-This repository is based on research project **56031** from Universidad
-Nacional de Colombia, Manizales, led by **Dr. Elisabeth Restrepo Parra** and
-funded by **Minciencias**, with territorial focus on Atlántico, Colombia.
+Cardiovascular disease is a leading cause of mortality in Colombia, and many
+post-stroke patients live with deficits that require continuous home care. In
+practice, clinical teams receive late signals: blood-pressure drift,
+hypoxemia, glucose excursions, or neurological deterioration evolve at home
+before anyone sees the trend. The monitoring kit costs about **COP 165,000
+(~US$50)**: oximeter, BP monitor, thermometer, scale — respiratory rate is
+free, you count it.
 
 ---
 
@@ -41,78 +47,141 @@ funded by **Minciencias**, with territorial focus on Atlántico, Colombia.
 ```mermaid
 graph TB
     subgraph Patient["👤 Patient at Home"]
-        TG["Telegram Bot<br/>vital signs every 6h"]
-        WEBPAT["Patient Dashboard<br/>history, risk, recommendations"]
+        TG["Telegram bot<br/>guided intake every 6h"]
+        WEBPAT["Patient dashboard<br/>history, risk, recommendations"]
     end
 
-    subgraph Frontend["☁️ Vercel — Next.js 14"]
-        NEXT["App Router<br/>TypeScript + Tailwind"]
-        AUTH["Supabase Auth<br/>role-based routing"]
-        DASH["Clinical Dashboards<br/>patient / IPS / admin"]
-    end
-
-    subgraph Backend["🚂 Railway — FastAPI"]
-        API["FastAPI API<br/>health, agents, ML, Telegram"]
-        BOT["python-telegram-bot<br/>commands + guided intake"]
-        NURSE["Agent 1: Carmen<br/>LangGraph nurse workflow"]
-        DOCTOR["Agent 2: Doctor<br/>LangGraph + RAG"]
-        ML["ML Engine<br/>real-outcome cohorts + SHAP"]
-        ALERTS["Alert Service<br/>Telegram + Resend email"]
+    subgraph Backend["🚂 Railway — FastAPI + LangGraph"]
+        BOT["python-telegram-bot<br/>self-registration + guided intake"]
+        NURSE["Nurse agent “CARMEN”<br/>structures reports · NO DIAGNOSIS"]
+        RISK["Risk engine<br/>LightGBM · 4 tiers · SHAP"]
+        OVR["Hard safety overrides<br/>SBP · HR · SpO₂ · glucose"]
+        FC["CARMEN-Forecast<br/>temporal transformer · 6/12/24h"]
+        DOCTOR["Physician agent<br/>RAG over guidelines · NO PRESCRIPTION"]
+        ALERTS["Alerts<br/>Telegram + Resend email"]
     end
 
     subgraph Data["🗄️ Supabase"]
-        PG["PostgreSQL<br/>profiles, vitals, predictions, reports, alerts"]
-        VECTOR["pgvector<br/>clinical guideline chunks"]
-        REALTIME["Realtime<br/>alert updates"]
+        PG["PostgreSQL — profiles, vitals,<br/>predictions, reports, alerts"]
+        VECTOR["pgvector — clinical guidelines"]
     end
 
-    subgraph External["🌐 External Services"]
-        OPENAI["OpenAI<br/>GPT-4o + text-embedding-3-small"]
-        TELEGRAM["Telegram HTTP API"]
-        RESEND["Resend Email API"]
+    subgraph Frontend["☁️ Vercel — Next.js 14"]
+        DASH["Dashboards<br/>patient / IPS / admin"]
     end
 
-    TG --> BOT
-    WEBPAT --> NEXT
-    NEXT --> AUTH
-    NEXT --> DASH
-    DASH <--> PG
-    DASH <--> REALTIME
-    BOT --> NURSE
-    API --> NURSE
+    TG --> BOT --> NURSE --> RISK --> OVR
+    OVR --> DOCTOR
+    RISK --> FC --> DOCTOR
+    DOCTOR --> ALERTS
     NURSE --> PG
-    NURSE --> ML
-    NURSE --> DOCTOR
     DOCTOR --> VECTOR
-    DOCTOR --> OPENAI
-    ML --> PG
-    NURSE --> ALERTS
-    ALERTS --> TELEGRAM
-    ALERTS --> RESEND
-    API --> PG
+    PG --> DASH
+    WEBPAT --> DASH
 ```
-
----
-
-## 🤖 Agent Flow
 
 ```mermaid
 flowchart LR
     MSG["Patient message<br/>free text or guided flow"] --> VALIDATE["validate_vitals"]
     VALIDATE --> SAVE["save_to_db"]
-    SAVE --> PREDICT["call_ml_script"]
-    PREDICT --> DOCTOR["call_doctor_agent"]
-    PREDICT --> CHECK["check_alert_needed"]
+    SAVE --> PREDICT["call_ml_script<br/>+ hard overrides"]
+    PREDICT --> FC["compute_forecast"]
+    FC --> DOCTOR["call_doctor_agent"]
+    DOCTOR --> CHECK["check_alert_needed"]
     CHECK -->|high / critical| SEND["send_alerts"]
     CHECK -->|low / moderate| BUILD["build_response"]
     SEND --> BUILD
-    DOCTOR --> BUILD
     BUILD --> REPLY["respond_to_patient"]
 ```
 
-**Design rule:** the nurse agent never diagnoses, and the doctor agent never
-prescribes or changes treatment. The system explains risk, escalates alerts,
-and supports clinical follow-up without replacing medical judgment.
+**Design rule:** the nurse agent never diagnoses, and the physician agent
+never prescribes or changes treatment. The system explains risk, escalates
+alerts, and supports clinical follow-up without replacing medical judgment.
+
+---
+
+## 🛡️ Safety by Construction
+
+Extreme values go **straight to urgent care — no model consulted**.
+Deterministic hard overrides sit above every model and can only *raise* the
+risk tier, never lower it, on both the ML path and the clinical-rules
+fallback:
+
+| Signal | Critical threshold |
+|---|---|
+| Systolic BP | ≥ 180 or < 80 mmHg |
+| Heart rate | > 130 or < 40 bpm |
+| SpO₂ | < 88 % |
+| Glucose (when reported) | > 400 or < 50 mg/dL |
+
+Every override is covered by a dedicated test table (Tabla A) executed
+against the real production model bundle, and surfaces in the clinical
+explanation (`override_applied`, `override_factors`).
+
+**Failures are loud, never silent:** a missing or corrupt model bundle logs a
+WARNING and degrades to audited clinical rules; the bundle's feature schema is
+validated at startup; agent-level exceptions are narrow and logged. The
+patient always gets a safe answer; the logs always say what degraded.
+
+---
+
+## 🧠 Risk Stratification
+
+| Level | Label | Meaning | Action |
+|---|---|---|---|
+| `low` | 🟢 Bajo | Stable vitals | Routine monitoring every 6 h |
+| `moderate` | 🟡 Moderado | Mild deviation | Increase vigilance |
+| `high` | 🔴 Alto | Significant risk signal | Assigned doctor notified |
+| `critical` | 🚨 Crítico | Emergency threshold or severe signal | Urgent care / línea 123 · doctor alerted |
+
+Predictions come from a LightGBM classifier with class probabilities,
+confidence score, SHAP values, and top risk factors — then pass through the
+hard overrides above. Detailed criteria:
+[`docs/estratificacion_riesgo.md`](docs/estratificacion_riesgo.md).
+
+---
+
+## 🔮 CARMEN-Forecast — Will they get worse?
+
+A **tiny temporal transformer** (d=96, 3 layers, 4 heads) consumes the same
+seven signals the Telegram intake collects — heart rate, SpO₂, systolic and
+diastolic BP, respiratory rate, temperature, weight — binned at the home
+cadence of 6 hours, and estimates the probability of clinical deterioration
+at **6, 12, and 24 hours**.
+
+- Validated on **MIMIC-IV** (94,458 ICU stays; 1.32M prediction points;
+  5-fold GroupKFold by subject): **AUROC 0.78 at 12 h** — *preliminary*:
+  trained in ICU, not yet validated on home-reported data, and labeled as
+  such everywhere it appears.
+- The deployed artifact is a final fit on the canonical run
+  (internal-validation AUROC 0.796 / 0.785 / 0.768 at 6/12/24 h), shipped
+  with its normalization, config, and provenance
+  (`backend/ml/models/carmen_forecast_tfm_home6h.pt`; exporter in the
+  research repo).
+- **Doctor-facing only.** The forecast is appended to the clinical report and
+  never shown to the patient. When p(6h) ≥ 0.5 the assigned doctor gets a
+  Telegram notice asking them to verify — a threshold chosen from the
+  out-of-fold scores: it fires on 6 % of checkpoints with **PPV 0.61 against
+  a 0.19 prevalence**. Configurable via `FORECAST_ALERT_THRESHOLD`.
+
+---
+
+## 🧪 ML Validation on Real Outcomes
+
+Models are validated on **real clinical outcomes by cohort** — never on our
+own triage rule. The MEWS/Framingham-style rule is kept as an audited
+baseline:
+
+| Cohort | Outcome | Rows | Best model | ROC-AUC | Rule ROC-AUC |
+|---|---|---:|---|---:|---:|
+| Stroke | `stroke` | 4,253 | Logistic Regression | 0.77 | 0.58 |
+| Cardiovascular | `cardio` | 68,651 | Gradient Boosting | 0.80 | 0.72 |
+| Heart Failure | `HeartDisease` | 918 | CatBoost | 0.91 | 0.55 |
+
+With leakage guards, calibration curves, decision-curve analysis, subgroup
+checks, and cluster-bootstrap intervals. Full artifacts under
+[`backend/ml/models/real_outcomes/`](backend/ml/models/real_outcomes/) and
+reproducibility notes in [`docs/modelo_real.md`](docs/modelo_real.md).
 
 ---
 
@@ -141,103 +210,24 @@ project. The full style guide lives in
 
 ## 🚀 Key Features
 
-- **Telegram-first clinical intake:** `/start`, `/registro`, `/vitales`,
-  `/estado`, `/historial`, `/ayuda`, and `/emergencia`.
-- **Guided vital-sign workflow:** blood pressure, heart rate, oxygen
-  saturation, glucose, pain, dizziness, and dyspnea.
-- **Validated ML cohorts:** real outcomes for stroke, cardiovascular disease,
-  and heart failure, with leakage guards, calibration, decision curves,
-  subgroup checks, bootstrap intervals, and SHAP.
-- **Explainable risk:** every prediction includes class probabilities,
-  confidence score, SHAP values, and top risk factors.
-- **Clinical RAG:** guideline chunks stored in Supabase `pgvector`, retrieved
-  for the doctor agent before generating structured recommendations.
-- **Role-based web app:** patient, IPS, and admin dashboards protected through
-  Supabase Auth middleware.
-- **High-risk escalation:** `high` and `critical` predictions trigger Telegram
-  and email alerts with retry-aware notification services.
-- **Production path:** Dockerized backend for Railway, Vercel-ready frontend,
-  GitHub Actions, smoke checks, and deployment runbooks.
-
----
-
-## 🧠 Risk Stratification
-
-HomecareCCV combines clinical rules inspired by **MEWS**, cardiovascular risk
-criteria aligned with **Framingham-style factors**, and real-time ML
-classification.
-
-| Level | Label | Clinical Meaning | Action |
-|---|---|---|---|
-| `low` | 🟢 Bajo | Stable vital signs and low short-term deterioration signal | Routine monitoring every 6 hours |
-| `moderate` | 🟡 Moderado | Mild deviation or accumulated risk factors | Increase vigilance and monitor persistence |
-| `high` | 🔴 Alto | Significant risk signal requiring clinical awareness | Notify assigned medical staff |
-| `critical` | 🚨 Crítico | Emergency threshold or severe deterioration signal | Urgent care / Colombian emergency line 123 |
-
-Immediate critical thresholds include systolic BP `> 180` or `< 80`, heart rate
-`> 130` or `< 40`, oxygen saturation `< 88%`, or glucose `> 400` or `< 50`.
-
-Detailed criteria are documented in
-[`docs/estratificacion_riesgo.md`](docs/estratificacion_riesgo.md).
-
----
-
-## 🧪 Machine Learning
-
-The validated research pipeline now uses **real clinical outcomes by cohort**
-instead of a synthetic `risk_level` target. The previous MEWS/Framingham rule is
-kept as an audited clinical baseline, not as the label learned by ML models.
-
-| Cohort | Real Outcome | Rows After Audit | Prevalence | Best Model | ROC-AUC | AUC-PR | Brier | Rule ROC-AUC | Δ Mean Net Benefit vs Rule |
-|---|---|---:|---:|---|---:|---:|---:|---:|---:|
-| Stroke | `stroke` | 4,253 | 5.8% | Logistic Regression | 0.771 | 0.138 | 0.059 | 0.576 | +0.0007 |
-| Cardiovascular | `cardio` | 68,651 | 49.5% | Gradient Boosting | 0.801 | 0.775 | 0.181 | 0.720 | +0.0251 |
-| Heart Failure | `HeartDisease` | 918 | 55.3% | CatBoost | 0.907 | 0.909 | 0.123 | 0.546 | +0.1013 |
-
-Why the metrics dropped: the old ~0.99 scores came from learning a deterministic
-rule-generated target. The new values are lower because they evaluate real
-dataset outcomes on held-out test splits. That is the scientifically valid
-result.
-
-Leakage guardrails:
-
-| Cohort | Removed Target-Derived Feature | Near-Constant Features Removed |
-|---|---|---|
-| Stroke | `stroke_history` | `heart_rate`, `oxygen_saturation`, `cholesterol_level`, `diabetes_history`, `alcohol_intake`, `physical_activity`, symptoms |
-| Cardiovascular | `heart_disease_history` | `heart_rate`, `oxygen_saturation`, `stroke_history`, symptoms |
-| Heart Failure | `heart_disease_history` | `oxygen_saturation`, `stroke_history`, `smoking_encoded`, `alcohol_intake`, symptoms, `bmi_category` |
-
-Artifacts:
-
-```text
-backend/ml/models/real_outcomes/real_outcome_results.json
-backend/ml/models/real_outcomes/{stroke,cvd,heart_failure}/best_model.pkl
-backend/ml/models/real_outcomes/figures/*.png
-data/processed/real_outcomes/{stroke,cvd,heart_failure}.csv
-docs/notebooks/homecare_ml_real_outcomes.ipynb
-```
-
-The operational Telegram risk endpoint still keeps the legacy rule-risk model
-available for four-level triage, but the main scientific ML report is now the
-real-outcome cohort evaluation.
-
-See [`docs/modelo_real.md`](docs/modelo_real.md) for reproducibility notes.
-
----
-
-## 🧬 Clinical Variables
-
-| Group | Features |
-|---|---|
-| Demographics | `age`, `gender_encoded` |
-| Vital signs | `systolic_bp`, `diastolic_bp`, `heart_rate`, `oxygen_saturation`, `glucose` |
-| Baseline risk | `bmi`, `cholesterol_level`, `hypertension_history`, `heart_disease_history`, `stroke_history`, `diabetes_history` |
-| Habits | `smoking_encoded`, `alcohol_intake`, `physical_activity` |
-| Symptoms | `pain_score`, `dizziness_score`, `dyspnea_score` |
-| Derived features | `pulse_pressure`, `map`, `bmi_category` |
-
-Full source mapping is documented in
-[`docs/variables_clinicas.md`](docs/variables_clinicas.md).
+- **Zero-friction onboarding:** scan the QR, send your document number, and
+  the bot registers you on the spot — name, account, and an assigned doctor
+  (least-loaded assignment), who is notified of the new patient by Telegram.
+- **Guided vital-sign intake:** blood pressure, heart rate, respiratory rate,
+  SpO₂, temperature, weight, glucose, plus pain / dizziness / dyspnea scores.
+  Commands: `/start`, `/registro`, `/vitales`, `/estado`, `/historial`,
+  `/emergencia`, `/ayuda`.
+- **Free-text Spanish understanding:** "presión 130/85, pulso 78, me siento
+  mareado" parses into structured vitals; conversational replies stay warm,
+  Colombian, and never diagnose.
+- **Explainable risk + hard overrides + forecast** — see the sections above.
+- **Clinical RAG:** MINSALUD, AHA/ASA, Framingham-for-Colombia and MEWS
+  guideline chunks in Supabase pgvector ground the physician agent's report.
+- **Multichannel escalation:** `high`/`critical` tiers alert patient and
+  assigned doctor via Telegram and Resend email, with retries and delivery
+  bookkeeping; 6-hour monitoring reminders run on América/Bogotá time.
+- **Role-based dashboards:** patient, IPS, and admin views (Next.js 14 +
+  Supabase Auth + Realtime).
 
 ---
 
@@ -245,16 +235,15 @@ Full source mapping is documented in
 
 | Layer | Technology |
 |---|---|
-| Frontend | Next.js 14, TypeScript, Tailwind CSS, Recharts, lucide-react |
-| Auth & DB | Supabase Auth, PostgreSQL, Realtime, pgvector |
-| Backend API | Python 3.12, FastAPI, pydantic-settings |
-| Agents | LangGraph, OpenAI GPT-4o |
-| RAG | OpenAI `text-embedding-3-small`, Supabase pgvector |
-| Telegram | python-telegram-bot v20+, APScheduler reminders |
-| ML | scikit-learn, imbalanced-learn, LightGBM, XGBoost, CatBoost, SHAP |
-| Email | Resend |
-| Deployment | Railway backend, Vercel frontend, GitHub Actions |
-| Local infra | Docker Compose with pgvector/PostgreSQL |
+| Backend | Python 3.12, FastAPI, LangGraph, python-telegram-bot, APScheduler |
+| Agents | OpenAI GPT-4o · prompts informed by CARMEN-I aggregates |
+| Risk ML | scikit-learn, LightGBM, XGBoost, CatBoost, SHAP |
+| Forecast | PyTorch (CPU) — tiny temporal transformer |
+| RAG | OpenAI `text-embedding-3-small` + Supabase pgvector |
+| Data & Auth | Supabase (PostgreSQL, Auth, Realtime, RLS) |
+| Frontend | Next.js 14, TypeScript, Tailwind CSS, Recharts |
+| Alerts | Telegram HTTP API, Resend |
+| Deployment | Railway (Docker) backend · Vercel frontend |
 
 ---
 
@@ -262,22 +251,20 @@ Full source mapping is documented in
 
 ```text
 homecare-ccv/
-├── backend/                  # FastAPI, agents, ML, RAG, Telegram, alerts
-│   ├── agents/               # Nurse + doctor LangGraph workflows
-│   ├── api/routes/           # REST endpoints
-│   ├── bot/                  # Telegram commands and guided intake
-│   ├── db/                   # Supabase client and SQL schema
-│   ├── ml/                   # ETL-facing model training and prediction
-│   ├── notifications/        # Telegram and email alert services
-│   └── rag/                  # Embeddings and pgvector retrieval
+├── backend/
+│   ├── agents/               # Nurse + physician LangGraph workflows and prompts
+│   ├── api/routes/           # REST endpoints (/health, /ml/predict, /ml/forecast, …)
+│   ├── bot/                  # Telegram registration, commands, guided intake
+│   ├── db/                   # Supabase client, repository, SQL schema
+│   ├── ml/                   # Risk models, hard overrides, forecast inference
+│   ├── notifications/        # Telegram + email alert services
+│   ├── rag/                  # Embeddings and pgvector retrieval
+│   └── tests/                # 58 tests: overrides (Tabla A), registration,
+│                             #   forecast, agents, bot, ML pipeline, prompts
 ├── frontend/                 # Next.js dashboards by role
-│   ├── app/                  # App Router routes
-│   ├── components/           # UI, charts, risk, vitals, alerts, chat
-│   └── lib/                  # Supabase and API clients
-├── data/                     # Kaggle dataset placeholders, ETL, processed data
-├── docs/                     # Architecture, deployment, bibliography, operations
-├── scripts/                  # Environment and deployment smoke checks
-└── .github/workflows/        # Railway and Vercel CI/CD
+├── data/                     # ETL and processed cohorts
+├── docs/                     # Architecture, deployment, style guide, ops
+└── scripts/                  # Env checks, deployment smoke, demo reset/seed
 ```
 
 ---
@@ -285,183 +272,76 @@ homecare-ccv/
 ## 💻 Local Setup
 
 ```bash
-# 1. Clone
 git clone https://github.com/cmorregof/homecare.git
 cd homecare
 
-# 2. Backend environment
-cp backend/.env.example backend/.env
-# Fill in: OPENAI_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_KEY,
-#          TELEGRAM_BOT_TOKEN, RESEND_API_KEY
-
-# 3. Frontend environment
-cp frontend/.env.local.example frontend/.env.local
-# Fill in: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY,
-#          NEXT_PUBLIC_API_URL, NEXT_PUBLIC_TELEGRAM_BOT_URL,
-#          NEXT_PUBLIC_SITE_URL
-
-# 4. Run local database + backend container
-docker compose up --build
-```
-
-Run the frontend separately:
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Run the backend directly:
-
-```bash
+# Backend
+cp backend/.env.example backend/.env      # fill in the secrets
 python3.12 -m venv .venv
+.venv/bin/python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
 .venv/bin/python -m pip install -r backend/requirements.txt
-cd backend
-PYTHONPATH=. ../.venv/bin/python -m uvicorn main:app --reload
-```
-
----
-
-## 📊 Dataset Pipeline
-
-Download the Kaggle datasets into `data/mock/`:
-
-```bash
-pip install kaggle
-
-kaggle datasets download fedesoriano/stroke-prediction-dataset \
-  -p data/mock/ --unzip
-
-kaggle datasets download sulianova/cardiovascular-disease-dataset \
-  -p data/mock/ --unzip
-
-kaggle datasets download fedesoriano/heart-failure-prediction \
-  -p data/mock/ --unzip
-```
-
-Build the unified dataset and train:
-
-```bash
-PYTHONPATH=backend .venv/bin/python data/etl/unify_datasets.py
-cd backend
-PYTHONPATH=. ../.venv/bin/python -m ml.train
-```
-
-Datasets:
-
-| Dataset | Source | Records | Purpose |
-|---|---:|---:|---|
-| Stroke Prediction Dataset | Kaggle / Fedesoriano | 5,110 | Stroke risk factors and comorbidities |
-| Cardiovascular Disease Dataset | Kaggle / Sulianova | 70,000 | BP, cholesterol, glucose, lifestyle variables |
-| Heart Failure Prediction | Kaggle / Fedesoriano | 918 | Complementary cardiovascular risk signal |
-
----
-
-## 🧪 Quality Checks
-
-```bash
-# Backend tests
-PYTHONPATH=backend .venv/bin/python -m unittest discover -s backend/tests -v
-
-# Backend compile
-python3 -m compileall backend scripts
+cd backend && PYTHONPATH=. ../.venv/bin/python -m uvicorn main:app --reload
 
 # Frontend
-cd frontend
-npm run lint
-npm run build
-npm run typecheck
-
-# Deployment smoke test
-python3 scripts/smoke_deployment.py --backend-url http://127.0.0.1:8000
+cp frontend/.env.local.example frontend/.env.local
+cd frontend && npm install && npm run dev
 ```
 
-Environment validation:
+Or with Docker: `docker compose up --build`.
+
+**Tests** (forecast runs in its own process — torch and LightGBM share an
+OpenMP runtime on macOS):
 
 ```bash
-python3 scripts/check_env.py --target backend --template backend/.env.example --allow-placeholder
-python3 scripts/check_env.py --target frontend --template frontend/.env.local.example --allow-placeholder
+cd backend
+../.venv/bin/python -m pytest tests/ --ignore=tests/test_forecast.py
+../.venv/bin/python -m pytest tests/test_forecast.py
+```
+
+**Deployment smoke:**
+
+```bash
+python3 scripts/smoke_deployment.py --backend-url https://<railway-domain>
 ```
 
 ---
 
 ## 🚢 Deployment
 
-**Backend: Railway**
+| Piece | Where | Notes |
+|---|---|---|
+| Backend | Railway | Docker (`python:3.12-slim` + `libgomp1` + CPU torch); root dir `/backend`; auto-deploys from `main`; health check `/health`; startup validates the model bundle and logs it |
+| Frontend | Vercel | Root `frontend/`, Next.js 14 |
+| Data | Supabase | Schema in `backend/db/schemas.sql`; demo reset/seed in `scripts/demo_reset_seed.sql` |
+| Telegram | webhook | `POST /telegram/webhook/setup` (domain-aware) |
 
-- Deployable from repository root.
-- Container: root `Dockerfile`, which packages `backend/`.
-- Health check: `/health`
-- Telegram webhook setup: `POST /telegram/webhook/setup`
-- CI workflow: `.github/workflows/backend_deploy.yml`
-
-**Frontend: Vercel**
-
-- Root directory: `frontend/`
-- Framework: Next.js
-- CI workflow: `.github/workflows/frontend_deploy.yml`
-
-**Required secrets**
-
-| Service | Variables |
-|---|---|
-| Backend | `OPENAI_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `TELEGRAM_BOT_TOKEN`, `RESEND_API_KEY`, `FROM_EMAIL` |
-| Frontend | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_TELEGRAM_BOT_URL`, `NEXT_PUBLIC_SITE_URL` |
-| GitHub Actions | `RAILWAY_TOKEN`, `RAILWAY_SERVICE`, `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` |
-
-Full deployment instructions are in [`docs/despliegue.md`](docs/despliegue.md),
-with production operations in
+Secrets and full runbooks: [`docs/despliegue.md`](docs/despliegue.md) ·
 [`docs/operacion_produccion.md`](docs/operacion_produccion.md).
 
 ---
 
-## 🏛️ Architecture Decisions
+## 📚 Scientific Basis & Data
 
-**Why Telegram first?** It minimizes patient friction: no app install, no new
-password flow during monitoring, and a familiar channel for older or supported
-patients.
+- **MIMIC-IV 3.1** (PhysioNet) for CARMEN-Forecast development; external
+  reconnaissance on NWICU.
+- **CARMEN-I 1.0.1** (PhysioNet, under CENTINELA) — aggregate statistics only,
+  for agent language design.
+- Kaggle cohorts (stroke, cardiovascular, heart failure) for real-outcome
+  risk validation.
+- Clinical grounding: MINSALUD Colombia 2022–2026, AHA/ASA 2024 secondary
+  stroke prevention, Framingham for the Colombian population, MEWS.
 
-**Why LangGraph?** The nurse and doctor workflows are stateful, conditional,
-and auditable. A graph makes validation, persistence, ML prediction, RAG,
-alerting, and final response explicit.
-
-**Why Supabase + pgvector?** Patient records, clinical reports, alerts, auth,
-realtime dashboards, and vector retrieval live in a single managed PostgreSQL
-surface without adding a separate vector database.
-
-**Why classical ML before transformers?** The first production phase requires
-strong tabular baselines, explainability, and reproducible clinical validation.
-Temporal Fusion Transformer / PatchTST is documented as Phase 2, once real
-longitudinal data from Atlántico is available.
-
----
-
-## 📚 Scientific Basis
-
-The project documentation cites clinical and technical references including:
-
-- Tumaini et al. (2025), intensive vital-sign monitoring after stroke.
-- Zain et al. (2024), ML prediction for cardio-cerebrovascular readmission.
-- Lv et al. (2023), interpretable ML for 30-day stroke readmission.
-- Ko et al. (2025), remote vital-sign monitoring in hospital-at-home programs.
-- Ministerio de Salud Colombia, cardiovascular and metabolic disease guidelines.
-- MedAgents, ClinicalAgents, and LangGraph-based healthcare orchestration work.
-
-See [`docs/bibliografia.md`](docs/bibliografia.md) for the full bibliography.
+Full bibliography: [`docs/bibliografia.md`](docs/bibliografia.md).
 
 ---
 
 ## 👥 Research Team
 
-- **Director:** Elisabeth Restrepo Parra — erestrepopa@unal.edu.co
-- **Institution:** Universidad Nacional de Colombia, sede Manizales
-- **Faculty:** Facultad de Ciencias Exactas y Naturales
-- **Department:** Departamento de Física y Química
-- **Funding:** Minciencias, Colombia
-- **Project code:** 56031
-
----
+**Carlos M. Orrego-Franco** · **Elisabeth Restrepo Parra** (director,
+erestrepopa@unal.edu.co) · **Juan Carlos Riaño-Rojas**
+Universidad Nacional de Colombia — Sede Manizales, Facultad de Ciencias
+Exactas y Naturales. Funded by Minciencias (project 56031, HomecareCCV).
+Clinical collaborators, pilot phase: Pablo Benjumea, Juan Camilo Arias.
 
 ## 📄 License
 
