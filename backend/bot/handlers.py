@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import unicodedata
 from dataclasses import dataclass
 from typing import Any
@@ -450,6 +451,13 @@ async def link_document_message(
 ) -> None:
     chat_id = _chat_id(update)
     document_id = _message_text(update).strip()
+    if not looks_like_document_id(document_id):
+        await _reply(
+            update,
+            "Ese texto no parece un número de documento. Escríbeme solo tu documento, "
+            "por ejemplo: 1234567890 (o si te dieron uno tipo cc123456, tal cual).",
+        )
+        return
     profile = await dependencies.repository.link_telegram_account(document_id, chat_id)
     if not profile:
         context.user_data["awaiting_document"] = False
@@ -485,7 +493,27 @@ async def register_new_patient_message(
             "Listo, no creé ninguna cuenta. Cuando quieras registrarte, envíame tu documento de nuevo.",
         )
         return
-    if len(text.split()) < 2 or looks_like_document_id(text):
+
+    document_in_text = extract_document_id(text)
+    if document_in_text:
+        existing = await dependencies.repository.link_telegram_account(
+            document_in_text, _chat_id(update)
+        )
+        if existing:
+            context.user_data.pop("awaiting_registration_name", None)
+            context.user_data.pop("registration_document", None)
+            context.user_data["awaiting_document"] = False
+            _cache_profile(context, existing)
+            await _reply(
+                update,
+                f"Listo, {existing.get('full_name', '')}. Ese documento ya tenía cuenta, "
+                "así que quedaste vinculado.\n\nPara registrar signos vitales usa /vitales.",
+            )
+            return
+        context.user_data["registration_document"] = document_in_text
+
+    full_name = extract_full_name(text)
+    if full_name is None:
         await _reply(
             update,
             "Para registrarte necesito tu nombre completo, por ejemplo: Ana María Pérez.",
@@ -495,7 +523,7 @@ async def register_new_patient_message(
     document_id = str(context.user_data.get("registration_document") or "")
     doctor = await pick_doctor_for_new_patient(dependencies.repository)
     profile = await dependencies.repository.create_patient_account(
-        full_name=text.title(),
+        full_name=full_name,
         document_id=document_id,
         telegram_chat_id=_chat_id(update),
         assigned_doctor_id=str(doctor["id"]) if doctor else None,
@@ -667,6 +695,37 @@ def looks_like_document_id(text: str) -> bool:
     if compact.startswith("cc"):
         compact = compact[2:]
     return compact.isdigit() and 5 <= len(compact) <= 15
+
+
+def extract_document_id(text: str) -> str | None:
+    normalized = text.lower()
+    match = re.search(r"cc[\s.\-]*(\d[\d.\-\s]{3,16}\d)", normalized)
+    if match:
+        digits = re.sub(r"\D", "", match.group(1))
+        if 5 <= len(digits) <= 15:
+            return f"cc{digits}"
+    match = re.search(r"\b(\d[\d.\-\s]{3,16}\d)\b", normalized)
+    if match:
+        digits = re.sub(r"\D", "", match.group(1))
+        if 5 <= len(digits) <= 15:
+            return digits
+    return None
+
+
+_NAME_NOISE = (
+    r"mi nombre es|me llamo|yo soy|soy|mi id es|mi id|mi documento es|mi documento|"
+    r"mi cedula es|mi cédula es|nombre|documento|cedula|cédula|id|es|y"
+)
+
+
+def extract_full_name(text: str) -> str | None:
+    cleaned = re.sub(r"(?i)cc[\s.\-]*\d[\d.\-\s]*\d?", " ", text)
+    cleaned = re.sub(r"\d[\d.\-\s]*\d|\d", " ", cleaned)
+    cleaned = re.sub(rf"(?i)\b(?:{_NAME_NOISE})\b", " ", cleaned)
+    words = [word for word in re.split(r"[\s,;:.!¡¿?\"']+", cleaned) if word]
+    if not 2 <= len(words) <= 6:
+        return None
+    return " ".join(words).title()
 
 
 def wants_status_context(text: str) -> bool:

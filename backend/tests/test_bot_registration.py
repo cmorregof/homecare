@@ -9,6 +9,8 @@ if str(REPO_ROOT) not in sys.path:
 
 from bot.handlers import (
     BotDependencies,
+    extract_document_id,
+    extract_full_name,
     link_document_message,
     looks_like_document_id,
     pick_doctor_for_new_patient,
@@ -24,12 +26,16 @@ DOCTORS = [
 
 
 class FakeRepository:
-    def __init__(self, counts=None, create_result="profile"):
+    def __init__(self, counts=None, create_result="profile", known_documents=None):
         self.counts = counts or {}
         self.create_result = create_result
         self.created = []
+        self.known_documents = known_documents or {}
 
     async def link_telegram_account(self, document_id, chat_id):
+        profile = self.known_documents.get(document_id)
+        if profile:
+            return {**profile, "telegram_chat_id": chat_id}
         return None
 
     async def get_doctor_roster(self):
@@ -133,6 +139,49 @@ class BotRegistrationTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(looks_like_document_id("CC 1.234.567"))
         self.assertTrue(looks_like_document_id("1234567"))
         self.assertFalse(looks_like_document_id("ana maria"))
+
+    async def test_greeting_is_not_treated_as_document(self):
+        deps = BotDependencies(repository=FakeRepository(), nurse_agent=None)
+        update = make_update("Hola")
+        context = make_context({"awaiting_document": True})
+        await link_document_message(update, context, deps)
+        self.assertNotIn("awaiting_registration_name", context.user_data)
+        self.assertIn("no parece un número de documento", update.effective_message.replies[0])
+
+    def test_extracts_name_and_document_from_natural_phrase(self):
+        text = "Mi nombre es Carlos Manuel Orrego y mi id es cc12345678"
+        self.assertEqual(extract_full_name(text), "Carlos Manuel Orrego")
+        self.assertEqual(extract_document_id(text), "cc12345678")
+        self.assertEqual(extract_document_id("mi cédula es 1.234.567.890"), "1234567890")
+        self.assertIsNone(extract_full_name("Hola"))
+
+    async def test_natural_phrase_registers_with_clean_name(self):
+        repository = FakeRepository()
+        deps = BotDependencies(repository=repository, nurse_agent=None)
+        update = make_update("Mi nombre es Carlos Manuel Orrego y mi id es cc99999999")
+        context = make_context(
+            {"awaiting_registration_name": True, "registration_document": "hola"}
+        )
+        await register_new_patient_message(update, context, deps)
+        created = repository.created[0]
+        self.assertEqual(created["full_name"], "Carlos Manuel Orrego")
+        self.assertEqual(created["document_id"], "cc99999999")
+
+    async def test_existing_document_in_phrase_links_instead_of_registering(self):
+        repository = FakeRepository(
+            known_documents={
+                "cc12345678": {"id": "doc-carlos", "full_name": "Carlos Orrego", "role": "ips"}
+            }
+        )
+        deps = BotDependencies(repository=repository, nurse_agent=None)
+        update = make_update("Mi nombre es Carlos Manuel Orrego y mi id es cc12345678")
+        context = make_context(
+            {"awaiting_registration_name": True, "registration_document": "hola"}
+        )
+        await register_new_patient_message(update, context, deps)
+        self.assertEqual(repository.created, [])
+        self.assertNotIn("awaiting_registration_name", context.user_data)
+        self.assertIn("quedaste vinculado", update.effective_message.replies[0])
 
 
 if __name__ == "__main__":
