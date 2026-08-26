@@ -58,11 +58,16 @@ class BotDependencies:
 
 def default_dependencies() -> BotDependencies:
     from agents.nurse_voice import compose_patient_message
+    from ml.predict import predict_risk
 
     repository = HomecareRepository()
     return BotDependencies(
         repository=repository,
-        nurse_agent=NurseAgent(repository=repository, voice=compose_patient_message),
+        nurse_agent=NurseAgent(
+            repository=repository,
+            ml_predictor=lambda payload: predict_risk(payload.get("features") or {}),
+            voice=compose_patient_message,
+        ),
         voice=compose_patient_message,
     )
 
