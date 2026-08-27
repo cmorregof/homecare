@@ -51,10 +51,17 @@ def load_document_text(path: Path) -> str:
     return ""
 
 
+EXCLUDED_FILES = {"README.md", "SOURCES.md"}
+
+
 def build_document_chunks(documents_dir: Path = DOCUMENTS_DIR) -> list[DocumentChunk]:
     chunks: list[DocumentChunk] = []
     for path in sorted(documents_dir.glob("*")):
-        if path.name.startswith(".") or path.suffix.lower() not in {".pdf", ".txt", ".md"}:
+        if (
+            path.name.startswith(".")
+            or path.name in EXCLUDED_FILES
+            or path.suffix.lower() not in {".pdf", ".txt", ".md"}
+        ):
             continue
         text = load_document_text(path).strip()
         for chunk_index, chunk in enumerate(chunk_text(text)):

@@ -15,7 +15,7 @@ Tu rol es:
 Guías que debes consultar preferentemente:
 - Lineamientos MINSALUD Colombia 2022-2026
 - Score de Framingham para población colombiana
-- Guías AHA/ASA 2024 para prevención secundaria de ACV
+- Guía AHA/ASA 2021 para prevención secundaria de ACV (Stroke 2021;52:e364-e467)
 - Criterios MEWS para deterioro clínico
 
 Nunca prescribas medicamentos, dosis ni cambios de tratamiento. Tus recomendaciones

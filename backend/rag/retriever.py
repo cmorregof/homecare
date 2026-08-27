@@ -7,7 +7,13 @@ from openai import AsyncOpenAI
 
 from config import settings
 from db.supabase_client import get_supabase_admin_client
-from rag.embeddings import DOCUMENTS_DIR, EMBEDDING_MODEL, chunk_text, load_document_text
+from rag.embeddings import (
+    DOCUMENTS_DIR,
+    EMBEDDING_MODEL,
+    EXCLUDED_FILES,
+    chunk_text,
+    load_document_text,
+)
 
 
 FALLBACK_CLINICAL_CONTEXT = [
@@ -91,7 +97,11 @@ class ClinicalRetriever:
         query_terms = set(query.lower().split())
         matches: list[dict[str, Any]] = []
         for path in sorted(self.documents_dir.glob("*")):
-            if path.name.startswith(".") or path.suffix.lower() not in {".pdf", ".txt", ".md"}:
+            if (
+                path.name.startswith(".")
+                or path.name in EXCLUDED_FILES
+                or path.suffix.lower() not in {".pdf", ".txt", ".md"}
+            ):
                 continue
             text = load_document_text(path)
             for chunk_index, chunk in enumerate(chunk_text(text)):

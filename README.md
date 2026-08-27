@@ -332,7 +332,7 @@ Secrets and full runbooks: [`docs/despliegue.md`](docs/despliegue.md) ·
   for agent language design.
 - Kaggle cohorts (stroke, cardiovascular, heart failure) for real-outcome
   risk validation.
-- Clinical grounding: MINSALUD Colombia 2022–2026, AHA/ASA 2024 secondary
+- Clinical grounding: MINSALUD Colombia 2013–2026, AHA/ASA 2021 secondary
   stroke prevention, Framingham for the Colombian population, MEWS.
 
 Full bibliography: [`docs/bibliografia.md`](docs/bibliografia.md).
