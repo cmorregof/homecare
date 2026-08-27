@@ -57,19 +57,41 @@ class BotDependencies:
 
 
 def default_dependencies() -> BotDependencies:
+    from agents.nurse_agent import build_wired_nurse_agent
     from agents.nurse_voice import compose_patient_message
-    from ml.predict import predict_risk
 
     repository = HomecareRepository()
     return BotDependencies(
         repository=repository,
-        nurse_agent=NurseAgent(
-            repository=repository,
-            ml_predictor=lambda payload: predict_risk(payload.get("features") or {}),
-            voice=compose_patient_message,
-        ),
+        nurse_agent=build_wired_nurse_agent(repository),
         voice=compose_patient_message,
     )
+
+
+async def carmen_web_chat_reply(
+    message: str,
+    repository: HomecareRepository,
+    profile: dict[str, Any] | None,
+    voice: Any | None = None,
+) -> str:
+    latest_prediction = None
+    recent_vitals: list[dict[str, Any]] = []
+    if profile and wants_status_context(message):
+        latest_prediction = await repository.get_latest_risk_prediction(str(profile["id"]))
+    if profile and wants_history_context(message):
+        recent_vitals = await repository.get_recent_vital_signs(str(profile["id"]), limit=5)
+    draft = build_carmen_free_text_response(message, profile, latest_prediction, recent_vitals)
+    if voice is not None and not _mentions_emergency(_normalize_text(message)):
+        draft = await voice(
+            "conversacion_libre_web",
+            {
+                "mensaje_del_paciente": message,
+                "paciente": _first_name(profile),
+                "es_emergencia": False,
+            },
+            draft,
+        )
+    return draft
 
 
 def register_handlers(application: Any, dependencies: BotDependencies | None = None) -> None:

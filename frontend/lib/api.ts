@@ -18,6 +18,18 @@ export async function getModelResults() {
   return response.json() as Promise<{ best_model?: string; results: ModelMetric[] }>;
 }
 
+export async function sendChatMessage(input: { patient_id: string; message: string }) {
+  const response = await fetch(`${API_URL}/agents/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    throw new Error("No fue posible conversar con Carmen.");
+  }
+  return response.json() as Promise<{ reply: string }>;
+}
+
 export async function processVitalReport(input: {
   patient_id: string;
   raw_message: string;

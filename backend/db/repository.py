@@ -92,6 +92,9 @@ class HomecareRepository:
         profile["telegram_chat_id"] = telegram_chat_id
         return profile
 
+    async def get_profile(self, profile_id: str) -> dict[str, Any] | None:
+        return await self._get_profile(profile_id)
+
     async def get_doctor_roster(self) -> list[dict[str, Any]]:
         client = self.client
         if client is None:

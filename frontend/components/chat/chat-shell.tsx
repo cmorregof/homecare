@@ -4,7 +4,7 @@ import { FormEvent, useMemo, useState } from "react";
 import { Send } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { processVitalReport } from "@/lib/api";
+import { processVitalReport, sendChatMessage } from "@/lib/api";
 import type { RiskLevel, UserRole, VitalSigns } from "@/types";
 
 type ChatMessage = {
@@ -49,7 +49,9 @@ export function ChatShell({
     try {
       const response = looksLikeVitals(value)
         ? (await processVitalReport({ patient_id: patientId, raw_message: value })).final_response
-        : buildContextualReply(value, role, currentRisk, latestVitals);
+        : role === "ips"
+          ? buildContextualReply(value, role, currentRisk, latestVitals)
+          : (await sendChatMessage({ patient_id: patientId, message: value })).reply;
       setMessages((current) => [...current, { id: crypto.randomUUID(), author: "assistant", text: response }]);
     } catch {
       setMessages((current) => [

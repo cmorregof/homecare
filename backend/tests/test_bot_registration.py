@@ -9,6 +9,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from bot.handlers import (
     BotDependencies,
+    carmen_web_chat_reply,
     extract_document_id,
     extract_full_name,
     link_document_message,
@@ -205,6 +206,41 @@ class BotRegistrationTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(repository.created, [])
         self.assertNotIn("awaiting_registration_name", context.user_data)
         self.assertIn("quedaste vinculado", update.effective_message.replies[0])
+
+
+class WebChatTest(unittest.IsolatedAsyncioTestCase):
+    async def test_web_chat_uses_voice_over_template_draft(self):
+        async def fake_voice(kind, payload, fallback):
+            return f"[abuelita] {payload['mensaje_del_paciente']}"
+
+        reply = await carmen_web_chat_reply(
+            "me siento algo mareado",
+            FakeRepository(),
+            {"id": "p1", "full_name": "Carlos Orrego", "role": "patient"},
+            voice=fake_voice,
+        )
+        self.assertEqual(reply, "[abuelita] me siento algo mareado")
+
+    async def test_web_chat_emergency_stays_deterministic(self):
+        async def fake_voice(kind, payload, fallback):
+            raise AssertionError("la emergencia no debe pasar por el LLM")
+
+        reply = await carmen_web_chat_reply(
+            "tengo un dolor en el pecho muy fuerte, es una emergencia",
+            FakeRepository(),
+            {"id": "p1", "full_name": "Carlos Orrego", "role": "patient"},
+            voice=fake_voice,
+        )
+        self.assertIn("123", reply)
+
+    def test_wired_nurse_agent_has_local_predictor_and_voice(self):
+        from agents.nurse_agent import build_wired_nurse_agent
+
+        agent = build_wired_nurse_agent(FakeRepository())
+        self.assertIsNotNone(agent.ml_predictor)
+        self.assertIsNotNone(agent.voice)
+        result = agent.ml_predictor({"features": {"oxygen_saturation": 84}})
+        self.assertEqual(result["risk_level"], "critical")
 
 
 if __name__ == "__main__":

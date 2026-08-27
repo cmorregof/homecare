@@ -26,6 +26,18 @@ logger = logging.getLogger(__name__)
 PatientVoice = Callable[[str, dict[str, Any], str], Awaitable[str]]
 
 
+def build_wired_nurse_agent(repository: HomecareRepository | None = None) -> "NurseAgent":
+    """Agente enfermera con todo conectado: predictor en-proceso y voz LLM."""
+    from agents.nurse_voice import compose_patient_message
+    from ml.predict import predict_risk
+
+    return NurseAgent(
+        repository=repository or HomecareRepository(),
+        ml_predictor=lambda payload: predict_risk(payload.get("features") or {}),
+        voice=compose_patient_message,
+    )
+
+
 class NurseAgent:
     def __init__(
         self,
