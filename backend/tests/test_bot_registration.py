@@ -208,6 +208,78 @@ class BotRegistrationTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("quedaste vinculado", update.effective_message.replies[0])
 
 
+class IntakeVoiceTest(unittest.IsolatedAsyncioTestCase):
+    def _context_with_deps(self, deps):
+        return SimpleNamespace(
+            user_data={},
+            application=SimpleNamespace(bot_data={"homecare_dependencies": deps}),
+        )
+
+    async def test_parse_tolerant_uses_llm_extraction_on_failure(self):
+        from unittest.mock import patch
+
+        from bot.handlers import _parse_tolerant
+        from bot.validators import parse_optional_number
+
+        async def fake_extract(field, fmt, text):
+            return "97"
+
+        deps = BotDependencies(repository=FakeRepository(), nurse_agent=None, voice=object())
+        context = self._context_with_deps(deps)
+        with patch("agents.nurse_voice.extract_intake_answer", fake_extract):
+            value = await _parse_tolerant(
+                context,
+                lambda t: parse_optional_number(t, label="saturación", minimum=1, maximum=100),
+                "noventa y siete",
+                "saturación",
+                "un número",
+            )
+        self.assertEqual(value, 97)
+
+    async def test_parse_tolerant_reraises_when_extraction_fails(self):
+        from unittest.mock import patch
+
+        from bot.handlers import _parse_tolerant
+        from bot.validators import parse_optional_number
+
+        async def fake_extract(field, fmt, text):
+            return None
+
+        deps = BotDependencies(repository=FakeRepository(), nurse_agent=None, voice=object())
+        context = self._context_with_deps(deps)
+        with patch("agents.nurse_voice.extract_intake_answer", fake_extract):
+            with self.assertRaises(ValueError):
+                await _parse_tolerant(
+                    context,
+                    lambda t: parse_optional_number(t, label="saturación", minimum=1, maximum=100),
+                    "esa",
+                    "saturación",
+                    "un número",
+                )
+
+    async def test_speak_rephrases_questions_with_voice(self):
+        from bot.handlers import _speak
+
+        async def fake_voice(kind, payload, fallback):
+            self.assertEqual(kind, "pregunta_de_intake")
+            return f"🌿 {fallback}"
+
+        deps = BotDependencies(repository=FakeRepository(), nurse_agent=None, voice=fake_voice)
+        context = self._context_with_deps(deps)
+        update = make_update("hola")
+        await _speak(update, context, "¿Cuál es tu temperatura?", step="temperatura")
+        self.assertEqual(update.effective_message.replies[0], "🌿 ¿Cuál es tu temperatura?")
+
+    async def test_speak_without_voice_keeps_draft(self):
+        from bot.handlers import _speak
+
+        deps = BotDependencies(repository=FakeRepository(), nurse_agent=None, voice=None)
+        context = self._context_with_deps(deps)
+        update = make_update("hola")
+        await _speak(update, context, "¿Cuál es tu temperatura?", step="temperatura")
+        self.assertEqual(update.effective_message.replies[0], "¿Cuál es tu temperatura?")
+
+
 class WebChatTest(unittest.IsolatedAsyncioTestCase):
     async def test_web_chat_uses_voice_over_template_draft(self):
         async def fake_voice(kind, payload, fallback):

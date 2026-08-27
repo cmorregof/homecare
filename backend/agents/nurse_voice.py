@@ -91,6 +91,52 @@ async def compose_patient_message(
         return fallback
 
 
+async def extract_intake_answer(
+    field_label: str,
+    expected_format: str,
+    text: str,
+    client: AsyncOpenAI | None = None,
+) -> str | None:
+    """Interpreta una respuesta libre del paciente ('noventa y siete', 'son 75, sí')
+    y la normaliza al formato que el validador determinista espera. El validador
+    original sigue teniendo la última palabra sobre rangos y formato."""
+    if not settings.openai_api_key:
+        return None
+    try:
+        openai_client = client or AsyncOpenAI(api_key=settings.openai_api_key)
+        response = await openai_client.chat.completions.create(
+            model="gpt-4o",
+            temperature=0,
+            max_tokens=15,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "Un paciente responde una pregunta de signos vitales. Extrae el valor "
+                        "que reporta y responde SOLO con ese valor en el formato pedido "
+                        "(convierte números en palabras a cifras; usa punto decimal). "
+                        "Si dice que no midió o no tiene el aparato, responde exactamente: no medí. "
+                        "Si la respuesta no contiene un valor claro, responde exactamente: NULO."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        f"Campo: {field_label}\nFormato esperado: {expected_format}\n"
+                        f"Respuesta del paciente: {text}"
+                    ),
+                },
+            ],
+        )
+        out = (response.choices[0].message.content or "").strip().strip(".")
+        if not out or out.upper() == "NULO":
+            return None
+        return out
+    except (OpenAIError, ValueError, KeyError) as exc:
+        logger.warning("Extractor de intake no disponible (%s)", exc)
+        return None
+
+
 def _loses_urgency(payload: dict[str, Any], fallback: str, text: str) -> bool:
     risk_level = str(payload.get("risk_level") or "").lower()
     if risk_level == "critical" or payload.get("es_emergencia"):

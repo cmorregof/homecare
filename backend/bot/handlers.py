@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 import unicodedata
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
 from telegram import Update
 from telegram.ext import CommandHandler, ContextTypes, ConversationHandler, MessageHandler, filters
@@ -217,54 +217,147 @@ async def emergency_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     )
 
 
+async def _speak(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    draft: str,
+    *,
+    step: str,
+    issue: str | None = None,
+    **kwargs: Any,
+) -> None:
+    deps = _deps(context)
+    text = draft
+    if deps.voice is not None:
+        text = await deps.voice(
+            "pregunta_de_intake",
+            {
+                "paso": step,
+                "problema_con_respuesta_anterior": issue,
+                "instruccion": (
+                    "Reformula el borrador como UNA pregunta corta y natural en tu voz, "
+                    "variando la redacción. Conserva intactos: las instrucciones de "
+                    "medición, los números y rangos, los formatos de ejemplo (como 120/80 "
+                    "o el conteo de 30 segundos) y la opción 'no medí' cuando aparezca."
+                ),
+            },
+            draft,
+        )
+    await _reply(update, text, **kwargs)
+
+
+async def _parse_tolerant(
+    context: ContextTypes.DEFAULT_TYPE,
+    parser: Callable[[str], Any],
+    raw: str,
+    field: str,
+    expected_format: str,
+) -> Any:
+    try:
+        return parser(raw)
+    except ValueError:
+        deps = _deps(context)
+        if deps.voice is None:
+            raise
+        from agents.nurse_voice import extract_intake_answer
+
+        extracted = await extract_intake_answer(field, expected_format, raw)
+        if extracted is None:
+            raise
+        return parser(extracted)
+
+
 async def start_vitals_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     deps = _deps(context)
     profile = await ensure_linked_patient(update, context, deps)
     if not profile:
         return ConversationHandler.END
     context.user_data["vitals_draft"] = {}
-    await _reply(
+    await _speak(
         update,
-        f"Hola {profile.get('full_name', '')}. Vamos a registrar tus signos vitales.\n"
+        context,
+        f"Hola {_first_name(profile)}. Vamos a registrar tus signos vitales.\n"
         "¿Tienes tu tensiómetro a la mano?",
+        step="saludo_y_tensiometro",
         reply_markup=yes_no_keyboard(),
     )
     return CONFIRM_TENSIOMETER
 
 
+RESPIRATORY_QUESTION = (
+    "Perfecto. Siéntate y descansa 5 minutos antes de empezar.\n\n"
+    "Primero la respiración, sin moverte ni hablar: pon un cronómetro de 30 segundos y "
+    "cuenta cuántas veces respiras (una subida y bajada del pecho es una). "
+    "Escríbeme ese conteo de 30 segundos. Ejemplo: 8. Si no pudiste, escribe 'no medí'."
+)
+
+
 async def confirm_tensiometer_step(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     answer = _message_text(update)
-    if is_negative(answer):
-        await _reply(
+    decided: str | None = None
+    if is_affirmative(answer):
+        decided = "SI"
+    elif is_negative(answer):
+        decided = "NO"
+    else:
+        deps = _deps(context)
+        if deps.voice is not None:
+            from agents.nurse_voice import extract_intake_answer
+
+            interpreted = await extract_intake_answer(
+                "¿tiene el tensiómetro a la mano?", "SI o NO", answer
+            )
+            if interpreted and interpreted.strip().upper().replace("Í", "I") in {"SI", "NO"}:
+                decided = interpreted.strip().upper().replace("Í", "I")
+    if decided == "NO":
+        await _speak(
             update,
+            context,
             "De acuerdo. Cuando tengas el tensiómetro a la mano vuelve con /vitales.",
+            step="despedida_sin_tensiometro",
             reply_markup=remove_keyboard(),
         )
         return ConversationHandler.END
-    if not is_affirmative(answer):
-        await _reply(update, "Respóndeme Sí o No, por favor.", reply_markup=yes_no_keyboard())
+    if decided != "SI":
+        await _speak(
+            update,
+            context,
+            "Respóndeme Sí o No, por favor.",
+            step="tensiometro_reintento",
+            issue=f"El paciente respondió: {answer}",
+            reply_markup=yes_no_keyboard(),
+        )
         return CONFIRM_TENSIOMETER
-    await _reply(
+    await _speak(
         update,
-        "Perfecto. Siéntate y descansa 5 minutos antes de empezar.\n\n"
-        "Primero la respiración, sin moverte ni hablar: pon un cronómetro de 30 segundos y "
-        "cuenta cuántas veces respiras (una subida y bajada del pecho es una). "
-        "Escríbeme ese conteo de 30 segundos. Ejemplo: 8. Si no pudiste, escribe 'no medí'.",
+        context,
+        RESPIRATORY_QUESTION,
+        step="frecuencia_respiratoria",
         reply_markup=remove_keyboard(),
     )
     return RESPIRATORY_RATE
 
 
 async def respiratory_rate_step(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    raw = _message_text(update)
     try:
-        count_30s = parse_optional_number(
-            _message_text(update),
-            label="respiraciones en 30 segundos",
-            minimum=3,
-            maximum=25,
+        count_30s = await _parse_tolerant(
+            context,
+            lambda t: parse_optional_number(
+                t, label="respiraciones en 30 segundos", minimum=3, maximum=25
+            ),
+            raw,
+            "respiraciones contadas en 30 segundos",
+            "un número entero entre 3 y 25, o 'no medí'",
         )
     except ValueError as exc:
-        await _reply(update, f"{exc} Recuerda: es el conteo de 30 segundos, normalmente entre 5 y 15.")
+        await _speak(
+            update,
+            context,
+            f"{exc} Recuerda: es el conteo de 30 segundos, normalmente entre 5 y 15.",
+            step="frecuencia_respiratoria_reintento",
+            issue=f"El paciente respondió: {raw}",
+        )
         return RESPIRATORY_RATE
     next_question = "Ahora ponte el oxímetro en el dedo, espera a que la cifra se estabilice y dime tu pulso. Ejemplo: 75"
     if count_30s is not None:
@@ -278,91 +371,143 @@ async def respiratory_rate_step(update: Update, context: ContextTypes.DEFAULT_TY
                 f"{next_question}",
             )
             return HEART_RATE
-        await _reply(update, f"Anotado: {per_minute} respiraciones por minuto.\n\n{next_question}")
+        await _speak(
+            update,
+            context,
+            f"Anotado: {per_minute} respiraciones por minuto.\n\n{next_question}",
+            step="pulso",
+        )
         return HEART_RATE
-    await _reply(update, next_question)
+    await _speak(update, context, next_question, step="pulso")
     return HEART_RATE
 
 
 async def blood_pressure_step(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    raw = _message_text(update)
     try:
-        systolic, diastolic = parse_blood_pressure(_message_text(update))
+        systolic, diastolic = await _parse_tolerant(
+            context,
+            parse_blood_pressure,
+            raw,
+            "presión arterial",
+            "dos números como 120/80",
+        )
     except ValueError as exc:
-        await _reply(update, str(exc))
+        await _speak(
+            update, context, str(exc),
+            step="presion_reintento", issue=f"El paciente respondió: {raw}",
+        )
         return BLOOD_PRESSURE
     draft = _draft(context)
     draft["systolic_bp"] = systolic
     draft["diastolic_bp"] = diastolic
-    await _reply(
+    await _speak(
         update,
+        context,
         "¿Cuál es tu temperatura en grados? Ejemplo: 36.8. Si no la mediste, escribe 'no medí'.",
+        step="temperatura",
     )
     return TEMPERATURE
 
 
 async def temperature_step(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    raw = _message_text(update)
     try:
-        value = parse_optional_number(
-            _message_text(update),
-            label="temperatura",
-            minimum=34,
-            maximum=42,
+        value = await _parse_tolerant(
+            context,
+            lambda t: parse_optional_number(t, label="temperatura", minimum=34, maximum=42),
+            raw,
+            "temperatura corporal en grados",
+            "un número como 36.8, o 'no medí'",
         )
     except ValueError as exc:
-        await _reply(update, str(exc))
+        await _speak(
+            update, context, str(exc),
+            step="temperatura_reintento", issue=f"El paciente respondió: {raw}",
+        )
         return TEMPERATURE
     if value is not None:
         _draft(context)["temperature"] = value
-    await _reply(
+    await _speak(
         update,
+        context,
         "¿Cuál es tu peso de hoy en kilos? Ejemplo: 68.5. "
         "El peso se toma una vez al día, en la mañana; si ya lo reportaste hoy o no te has pesado, escribe 'no medí'.",
+        step="peso",
     )
     return WEIGHT
 
 
 async def weight_step(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    raw = _message_text(update)
     try:
-        value = parse_optional_number(
-            _message_text(update),
-            label="peso",
-            minimum=25,
-            maximum=300,
+        value = await _parse_tolerant(
+            context,
+            lambda t: parse_optional_number(t, label="peso", minimum=25, maximum=300),
+            raw,
+            "peso corporal en kilos",
+            "un número como 68.5, o 'no medí'",
         )
     except ValueError as exc:
-        await _reply(update, str(exc))
+        await _speak(
+            update, context, str(exc),
+            step="peso_reintento", issue=f"El paciente respondió: {raw}",
+        )
         return WEIGHT
     if value is not None:
         _draft(context)["weight_kg"] = value
-    await _reply(update, "¿Cómo está tu glucosa hoy? Si no la tienes, escribe 'no medí'.")
+    await _speak(
+        update, context,
+        "¿Cómo está tu glucosa hoy? Si no la tienes, escribe 'no medí'.",
+        step="glucosa",
+    )
     return GLUCOSE
 
 
 async def heart_rate_step(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    raw = _message_text(update)
     try:
-        _draft(context)["heart_rate"] = parse_required_number(
-            _message_text(update),
-            label="frecuencia cardíaca",
-            minimum=25,
-            maximum=220,
+        _draft(context)["heart_rate"] = await _parse_tolerant(
+            context,
+            lambda t: parse_required_number(
+                t, label="frecuencia cardíaca", minimum=25, maximum=220
+            ),
+            raw,
+            "pulso (frecuencia cardíaca)",
+            "un número entero como 75",
         )
     except ValueError as exc:
-        await _reply(update, str(exc))
+        await _speak(
+            update, context, str(exc),
+            step="pulso_reintento", issue=f"El paciente respondió: {raw}",
+        )
         return HEART_RATE
-    await _reply(update, "Sin quitarte el oxímetro, dime tu saturación de oxígeno. Ejemplo: 97. Si no tienes oxímetro, escribe 'no medí'.")
+    await _speak(
+        update, context,
+        "Sin quitarte el oxímetro, dime tu saturación de oxígeno. Ejemplo: 97. "
+        "Si no tienes oxímetro, escribe 'no medí'.",
+        step="saturacion",
+    )
     return OXYGEN
 
 
 async def oxygen_step(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    raw = _message_text(update)
     try:
-        value = parse_optional_number(
-            _message_text(update),
-            label="saturación de oxígeno",
-            minimum=1,
-            maximum=100,
+        value = await _parse_tolerant(
+            context,
+            lambda t: parse_optional_number(
+                t, label="saturación de oxígeno", minimum=1, maximum=100
+            ),
+            raw,
+            "saturación de oxígeno (SpO2)",
+            "un número entero como 97, o 'no medí'",
         )
     except ValueError as exc:
-        await _reply(update, str(exc))
+        await _speak(
+            update, context, str(exc),
+            step="saturacion_reintento", issue=f"El paciente respondió: {raw}",
+        )
         return OXYGEN
     if value is not None:
         _draft(context)["oxygen_saturation"] = value
@@ -379,47 +524,99 @@ async def oxygen_step(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
             f"{next_question}",
         )
         return BLOOD_PRESSURE
-    await _reply(update, next_question)
+    await _speak(update, context, next_question, step="presion_arterial")
     return BLOOD_PRESSURE
 
 
 async def glucose_step(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    raw = _message_text(update)
     try:
-        value = parse_optional_number(_message_text(update), label="glucosa", minimum=20, maximum=600)
+        value = await _parse_tolerant(
+            context,
+            lambda t: parse_optional_number(t, label="glucosa", minimum=20, maximum=600),
+            raw,
+            "glucosa en sangre",
+            "un número como 110, o 'no medí'",
+        )
     except ValueError as exc:
-        await _reply(update, str(exc))
+        await _speak(
+            update, context, str(exc),
+            step="glucosa_reintento", issue=f"El paciente respondió: {raw}",
+        )
         return GLUCOSE
     if value is not None:
         _draft(context)["glucose"] = value
-    await _reply(update, "En una escala de 0 a 10, ¿tienes dolor en este momento?")
+    await _speak(
+        update, context,
+        "En una escala de 0 a 10, ¿tienes dolor en este momento?",
+        step="dolor",
+    )
     return PAIN
 
 
 async def pain_step(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    raw = _message_text(update)
     try:
-        _draft(context)["pain_score"] = parse_score(_message_text(update), label="dolor")
+        _draft(context)["pain_score"] = await _parse_tolerant(
+            context,
+            lambda t: parse_score(t, label="dolor"),
+            raw,
+            "dolor en escala de 0 a 10",
+            "un número entero de 0 a 10",
+        )
     except ValueError as exc:
-        await _reply(update, str(exc))
+        await _speak(
+            update, context, str(exc),
+            step="dolor_reintento", issue=f"El paciente respondió: {raw}",
+        )
         return PAIN
-    await _reply(update, "¿Tienes mareos o sensación de inestabilidad? Responde de 0 a 10.")
+    await _speak(
+        update, context,
+        "¿Tienes mareos o sensación de inestabilidad? Responde de 0 a 10.",
+        step="mareo",
+    )
     return DIZZINESS
 
 
 async def dizziness_step(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    raw = _message_text(update)
     try:
-        _draft(context)["dizziness_score"] = parse_score(_message_text(update), label="mareo")
+        _draft(context)["dizziness_score"] = await _parse_tolerant(
+            context,
+            lambda t: parse_score(t, label="mareo"),
+            raw,
+            "mareo en escala de 0 a 10",
+            "un número entero de 0 a 10",
+        )
     except ValueError as exc:
-        await _reply(update, str(exc))
+        await _speak(
+            update, context, str(exc),
+            step="mareo_reintento", issue=f"El paciente respondió: {raw}",
+        )
         return DIZZINESS
-    await _reply(update, "¿Sientes dificultad para respirar? Responde de 0 a 10.")
+    await _speak(
+        update, context,
+        "¿Sientes dificultad para respirar? Responde de 0 a 10.",
+        step="disnea",
+    )
     return DYSPNEA
 
 
 async def dyspnea_step(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    raw = _message_text(update)
     try:
-        _draft(context)["dyspnea_score"] = parse_score(_message_text(update), label="dificultad para respirar")
+        _draft(context)["dyspnea_score"] = await _parse_tolerant(
+            context,
+            lambda t: parse_score(t, label="dificultad para respirar"),
+            raw,
+            "dificultad para respirar en escala de 0 a 10",
+            "un número entero de 0 a 10",
+        )
     except ValueError as exc:
-        await _reply(update, str(exc))
+        await _speak(
+            update, context, str(exc),
+            step="disnea_reintento", issue=f"El paciente respondió: {raw}",
+        )
         return DYSPNEA
 
     deps = _deps(context)
