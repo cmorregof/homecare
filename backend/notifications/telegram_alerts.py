@@ -9,21 +9,34 @@ from config import settings
 from utils.risk_levels import RISK_LEVELS, normalize_risk_level
 
 
-async def send_telegram_risk_alert(payload: dict[str, Any], attempts: int = 3) -> bool:
+async def send_telegram_risk_alert(
+    payload: dict[str, Any],
+    attempts: int = 3,
+    patient_text: str | None = None,
+) -> bool:
     token = settings.telegram_bot_token
-    chat_ids = [
-        payload.get("patient_telegram_chat_id"),
-        payload.get("doctor_telegram_chat_id"),
-    ]
-    recipients = [int(chat_id) for chat_id in chat_ids if chat_id]
-    if not token or not recipients:
+    patient_chat_id = payload.get("patient_telegram_chat_id")
+    doctor_chat_id = payload.get("doctor_telegram_chat_id")
+    if not token or not (patient_chat_id or doctor_chat_id):
         return False
 
     message = build_telegram_alert_message(payload)
-    results = [
-        await send_telegram_message(chat_id=chat_id, text=message, token=token, attempts=attempts)
-        for chat_id in recipients
-    ]
+    results = []
+    if patient_chat_id:
+        results.append(
+            await send_telegram_message(
+                chat_id=int(patient_chat_id),
+                text=patient_text or message,
+                token=token,
+                attempts=attempts,
+            )
+        )
+    if doctor_chat_id:
+        results.append(
+            await send_telegram_message(
+                chat_id=int(doctor_chat_id), text=message, token=token, attempts=attempts
+            )
+        )
     return any(results)
 
 

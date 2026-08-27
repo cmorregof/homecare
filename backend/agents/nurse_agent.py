@@ -14,7 +14,11 @@ from config import settings
 from db.repository import HomecareRepository
 from ml.forecast import forecast_deterioration, format_forecast_note
 from notifications.email import send_risk_email_alert
-from notifications.telegram_alerts import send_telegram_message, send_telegram_risk_alert
+from notifications.telegram_alerts import (
+    build_telegram_alert_message,
+    send_telegram_message,
+    send_telegram_risk_alert,
+)
 from utils.risk_levels import RISK_LEVELS, estimate_rule_based_risk, normalize_risk_level, should_alert_staff
 
 
@@ -235,7 +239,20 @@ class NurseAgent:
             "vital_signs": state.get("vital_signs", {}),
             "recommendations": state.get("recommendations") or risk["action"],
         }
-        telegram_sent = await send_telegram_risk_alert(notification_payload)
+        patient_text = None
+        if self.voice is not None:
+            patient_text = await self.voice(
+                "alerta_de_riesgo_al_paciente",
+                {
+                    "risk_level": normalize_risk_level(state.get("risk_level")),
+                    "alerta_enviada_al_equipo": True,
+                    "signos_vitales": state.get("vital_signs", {}),
+                },
+                build_telegram_alert_message(notification_payload),
+            )
+        telegram_sent = await send_telegram_risk_alert(
+            notification_payload, patient_text=patient_text
+        )
         email_sent = await send_risk_email_alert(notification_payload)
         await self.repository.save_alert(
             {

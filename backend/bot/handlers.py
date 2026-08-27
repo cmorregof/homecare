@@ -366,8 +366,10 @@ async def respiratory_rate_step(update: Update, context: ContextTypes.DEFAULT_TY
         if per_minute < 8 or per_minute > 28:
             await _reply(
                 update,
-                f"Eso equivale a {per_minute} respiraciones por minuto, que está en rango de alarma. "
-                "Si tienes ahogo marcado, dolor en el pecho o mucho decaimiento, llama al 123 o ve a urgencias.\n\n"
+                f"Mijo, eso equivale a {per_minute} respiraciones por minuto y es más de lo "
+                "que me gusta ver. Si además sientes ahogo marcado, dolor en el pecho o mucho "
+                "decaimiento, no esperes: ve a urgencias o marca el 123 ya mismo. "
+                "Si te sientes bien, seguimos con calma.\n\n"
                 f"{next_question}",
             )
             return HEART_RATE
@@ -518,9 +520,10 @@ async def oxygen_step(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     if value is not None and float(value) < 88:
         await _reply(
             update,
-            "Gracias por decírmelo. Esa saturación está en rango de alarma. "
-            "Si el oxímetro marcó bien o tienes ahogo, labios morados, dolor en el pecho, "
-            "confusión o mucho decaimiento, llama al 123 o ve a urgencias ahora.\n\n"
+            "Gracias por decírmelo, mijo. Esa saturación me preocupa de verdad. "
+            "Revisa primero que el oxímetro haya marcado bien; y si marcó bien, o sientes "
+            "ahogo, labios morados, dolor en el pecho, confusión o mucho decaimiento, "
+            "no esperes nada: urgencias o el 123 ahora mismo.\n\n"
             f"{next_question}",
         )
         return BLOOD_PRESSURE
