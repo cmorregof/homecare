@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { AlertRow } from "@/components/alerts/alert-row";
+import { EmptyState } from "@/components/ui/empty-state";
 import { createBrowserSupabaseClient, isSupabaseConfigured } from "@/lib/supabase";
 import type { AlertRecord } from "@/types";
 
@@ -28,9 +29,11 @@ export function RealtimeAlertList({ initialAlerts }: { initialAlerts: AlertRecor
 
   return (
     <div className="space-y-3">
-      {alerts.map((alert) => (
-        <AlertRow key={alert.id} alert={alert} />
-      ))}
+      {alerts.length === 0 ? (
+        <EmptyState>No hay alertas registradas.</EmptyState>
+      ) : (
+        alerts.map((alert) => <AlertRow key={alert.id} alert={alert} />)
+      )}
     </div>
   );
 }

@@ -22,6 +22,7 @@ export interface VitalSigns {
   diastolic_bp?: number;
   heart_rate?: number;
   oxygen_saturation?: number;
+  respiratory_rate?: number;
   temperature?: number;
   glucose?: number;
   weight_kg?: number;

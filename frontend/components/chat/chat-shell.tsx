@@ -68,12 +68,12 @@ export function ChatShell({
   }
 
   return (
-    <section className="flex min-h-[620px] flex-col rounded-md border border-slate-200 bg-white">
-      <div className="border-b border-slate-200 px-4 py-3">
-        <p className="font-semibold text-ink">Carmen</p>
-        <p className="text-sm text-slate-600">Agente Enfermera HomecareCCV</p>
+    <section className="flex min-h-[620px] flex-col rounded-lg border border-border bg-surface shadow-sm">
+      <div className="border-b border-border px-5 py-4">
+        <p className="font-bold text-ink">Carmen</p>
+        <p className="text-sm text-muted">Agente Enfermera HomecareCCV</p>
       </div>
-      <div className="flex-1 space-y-3 overflow-y-auto p-4">
+      <div className="flex-1 space-y-3 overflow-y-auto p-5">
         {messages.map((message) => (
           <div
             key={message.id}
@@ -82,8 +82,8 @@ export function ChatShell({
             <div
               className={
                 message.author === "user"
-                  ? "max-w-[82%] rounded-md bg-clinical px-4 py-3 text-sm leading-6 text-white"
-                  : "max-w-[82%] rounded-md bg-slate-100 px-4 py-3 text-sm leading-6 text-slate-800"
+                  ? "max-w-[82%] rounded-lg rounded-br-sm bg-brand px-4 py-3 text-base leading-relaxed text-white"
+                  : "max-w-[82%] rounded-lg rounded-bl-sm border border-border bg-canvas px-4 py-3 text-base leading-relaxed text-ink"
               }
             >
               {message.text}
@@ -91,11 +91,15 @@ export function ChatShell({
           </div>
         ))}
       </div>
-      <form onSubmit={handleSubmit} className="flex gap-2 border-t border-slate-200 p-3">
+      <form onSubmit={handleSubmit} className="flex gap-2 border-t border-border p-4">
+        <label htmlFor="chat-input" className="sr-only">
+          Mensaje para Carmen
+        </label>
         <input
+          id="chat-input"
           value={text}
           onChange={(event) => setText(event.target.value)}
-          className="min-w-0 flex-1 rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-clinical focus:ring-2 focus:ring-teal-100"
+          className="min-w-0 flex-1 rounded-md border border-border bg-surface px-3 py-2.5 text-base text-ink outline-none transition focus:border-brand focus:ring-[3px] focus:ring-brand/[0.12]"
           placeholder="Escribe aquí"
         />
         <Button type="submit" disabled={sending}>

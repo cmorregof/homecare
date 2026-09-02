@@ -2,7 +2,9 @@ import { AlertRow } from "@/components/alerts/alert-row";
 import { VitalsLineChart } from "@/components/charts/vitals-line-chart";
 import { RiskPanel } from "@/components/risk/risk-badge";
 import { AppShell } from "@/components/ui/app-shell";
-import { VitalCard } from "@/components/vitals/vital-card";
+import { EmptyState } from "@/components/ui/empty-state";
+import { SectionTitle } from "@/components/ui/page-header";
+import { Card, CardTitle, VitalCard } from "@/components/vitals/vital-card";
 import { requireRole } from "@/lib/auth";
 import { getPatientDetail } from "@/lib/data";
 
@@ -24,16 +26,20 @@ export default async function IpsPatientDetailPage({ params }: { params: { id: s
         </div>
         <div className="space-y-5">
           <VitalsLineChart data={vitals} />
-          <section className="rounded-md border border-slate-200 bg-white p-5">
-            <h2 className="font-semibold">Reporte clínico</h2>
-            <p className="mt-3 text-sm leading-6 text-slate-700">{report.interpretation}</p>
-            <p className="mt-3 text-sm leading-6 text-slate-700">{report.recommendations}</p>
-            <p className="mt-3 text-sm font-medium text-slate-600">{report.follow_up_actions}</p>
-          </section>
+          <Card>
+            <CardTitle>Reporte clínico</CardTitle>
+            <p className="text-base leading-relaxed text-ink">{report.interpretation}</p>
+            <p className="mt-3 text-base leading-relaxed text-ink">{report.recommendations}</p>
+            <p className="mt-3 text-base font-semibold text-muted">{report.follow_up_actions}</p>
+          </Card>
           <section>
-            <h2 className="mb-3 font-semibold">Alertas del paciente</h2>
+            <SectionTitle className="mt-0">Alertas del paciente</SectionTitle>
             <div className="space-y-3">
-              {alerts.map((alert) => <AlertRow key={alert.id} alert={alert} />)}
+              {alerts.length === 0 ? (
+                <EmptyState>Este paciente no tiene alertas registradas.</EmptyState>
+              ) : (
+                alerts.map((alert) => <AlertRow key={alert.id} alert={alert} />)
+              )}
             </div>
           </section>
         </div>

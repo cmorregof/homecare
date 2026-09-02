@@ -4,6 +4,10 @@ import { FormEvent, useState } from "react";
 import { UserPlus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Field, SelectField } from "@/components/ui/field";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Table, TableWrap, Td, Th, Tr } from "@/components/ui/table";
+import { Card, CardTitle } from "@/components/vitals/vital-card";
 import type { Profile, UserRole } from "@/types";
 
 export function UserManagement({ initialProfiles }: { initialProfiles: Profile[] }) {
@@ -34,62 +38,83 @@ export function UserManagement({ initialProfiles }: { initialProfiles: Profile[]
 
   return (
     <div className="grid gap-5 xl:grid-cols-[360px_1fr]">
-      <form onSubmit={createUser} className="rounded-md border border-slate-200 bg-white p-5">
-        <h2 className="font-semibold">Crear usuario</h2>
-        <label className="mt-4 block text-sm font-medium text-slate-700">
-          Nombre
-          <input value={name} onChange={(event) => setName(event.target.value)} className="mt-1 h-11 w-full rounded-md border border-slate-300 px-3" />
-        </label>
-        <label className="mt-4 block text-sm font-medium text-slate-700">
-          Rol
-          <select value={role} onChange={(event) => setRole(event.target.value as UserRole)} className="mt-1 h-11 w-full rounded-md border border-slate-300 px-3">
+      <Card>
+        <form onSubmit={createUser}>
+          <CardTitle>Crear usuario</CardTitle>
+          <Field label="Nombre" value={name} onChange={(event) => setName(event.target.value)} />
+          <SelectField label="Rol" value={role} onChange={(event) => setRole(event.target.value as UserRole)}>
             <option value="patient">Paciente</option>
             <option value="ips">IPS</option>
             <option value="admin">Admin</option>
-          </select>
-        </label>
-        <Button type="submit" className="mt-5 w-full">
-          <UserPlus className="h-4 w-4" aria-hidden />
-          Crear
-        </Button>
-      </form>
+          </SelectField>
+          <Button type="submit" full className="mt-2">
+            <UserPlus className="h-4 w-4" aria-hidden />
+            Crear
+          </Button>
+        </form>
+      </Card>
 
-      <section className="overflow-hidden rounded-md border border-slate-200 bg-white">
-        <table className="w-full min-w-[680px] text-left text-sm">
-          <thead className="border-b border-slate-200 bg-slate-50 text-slate-600">
-            <tr>
-              <th className="px-4 py-3 font-semibold">Usuario</th>
-              <th className="px-4 py-3 font-semibold">Rol</th>
-              <th className="px-4 py-3 font-semibold">Médico asignado</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {profiles.map((profile) => (
-              <tr key={profile.id}>
-                <td className="px-4 py-3">
-                  <p className="font-medium text-ink">{profile.full_name}</p>
-                  <p className="text-xs text-slate-500">{profile.document_id ?? profile.email ?? profile.id}</p>
-                </td>
-                <td className="px-4 py-3">
-                  <select value={profile.role} onChange={(event) => updateRole(profile.id, event.target.value as UserRole)} className="h-9 rounded-md border border-slate-300 px-2">
-                    <option value="patient">Paciente</option>
-                    <option value="ips">IPS</option>
-                    <option value="admin">Admin</option>
-                  </select>
-                </td>
-                <td className="px-4 py-3">
-                  <select className="h-9 rounded-md border border-slate-300 px-2" defaultValue={profile.assigned_doctor_id ?? ""}>
-                    <option value="">Sin asignar</option>
-                    {profiles.filter((item) => item.role === "ips").map((doctor) => (
-                      <option key={doctor.id} value={doctor.id}>{doctor.full_name}</option>
-                    ))}
-                  </select>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
+      <TableWrap>
+        {profiles.length === 0 ? (
+          <EmptyState>No hay usuarios registrados.</EmptyState>
+        ) : (
+          <div className="min-w-[680px]">
+            <Table>
+              <thead>
+                <tr>
+                  <Th>Usuario</Th>
+                  <Th>Rol</Th>
+                  <Th>Médico asignado</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {profiles.map((profile) => (
+                  <Tr key={profile.id}>
+                    <Td>
+                      <p className="font-semibold text-ink">{profile.full_name}</p>
+                      <p className="text-xs text-muted">{profile.document_id ?? profile.email ?? profile.id}</p>
+                    </Td>
+                    <Td>
+                      <label htmlFor={`role-${profile.id}`} className="sr-only">
+                        Rol de {profile.full_name}
+                      </label>
+                      <select
+                        id={`role-${profile.id}`}
+                        value={profile.role}
+                        onChange={(event) => updateRole(profile.id, event.target.value as UserRole)}
+                        className={INLINE_SELECT}
+                      >
+                        <option value="patient">Paciente</option>
+                        <option value="ips">IPS</option>
+                        <option value="admin">Admin</option>
+                      </select>
+                    </Td>
+                    <Td>
+                      <label htmlFor={`doctor-${profile.id}`} className="sr-only">
+                        Médico asignado a {profile.full_name}
+                      </label>
+                      <select
+                        id={`doctor-${profile.id}`}
+                        className={INLINE_SELECT}
+                        defaultValue={profile.assigned_doctor_id ?? ""}
+                      >
+                        <option value="">Sin asignar</option>
+                        {profiles.filter((item) => item.role === "ips").map((doctor) => (
+                          <option key={doctor.id} value={doctor.id}>{doctor.full_name}</option>
+                        ))}
+                      </select>
+                    </Td>
+                  </Tr>
+                ))}
+              </tbody>
+            </Table>
+          </div>
+        )}
+      </TableWrap>
     </div>
   );
 }
+
+/** Compact control for use inside a table cell. */
+const INLINE_SELECT =
+  "rounded-md border border-border bg-surface px-2 py-1.5 text-base text-ink outline-none transition focus:border-brand focus:ring-[3px] focus:ring-brand/[0.12]";

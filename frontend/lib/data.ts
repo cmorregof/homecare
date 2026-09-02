@@ -12,6 +12,7 @@ import {
   mockSystemMetrics,
   mockVitals,
 } from "@/lib/mock-data";
+import { warnDemoData } from "@/lib/demo-mode";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import type {
@@ -31,6 +32,7 @@ import type {
 export async function getCurrentProfile(fallbackRole: UserRole = "patient"): Promise<Profile | null> {
   noStore();
   if (!isSupabaseConfigured()) {
+    warnDemoData("el perfil del usuario");
     return mockProfiles.find((profile) => profile.role === fallbackRole) ?? mockProfiles[0];
   }
   const supabase = createServerSupabaseClient();
@@ -47,6 +49,7 @@ export async function getCurrentProfile(fallbackRole: UserRole = "patient"): Pro
 export async function getPatientDashboardData(patientId?: string) {
   noStore();
   if (!isSupabaseConfigured()) {
+    warnDemoData("el panel del paciente: perfil, signos vitales, predicción y reporte");
     return {
       profile: mockProfiles[0],
       vitals: mockVitals,
@@ -102,6 +105,7 @@ export async function getPatientHistory(page = 1, pageSize = 8) {
 export async function getIpsDashboardData(filter?: RiskLevel | "all") {
   noStore();
   if (!isSupabaseConfigured()) {
+    warnDemoData("el panel de la IPS: pacientes y alertas");
     const patients = applyRiskFilter(mockPatients, filter);
     return { patients, alerts: mockAlerts };
   }
@@ -111,6 +115,7 @@ export async function getIpsDashboardData(filter?: RiskLevel | "all") {
     .select("*")
     .order("created_at", { ascending: false })
     .limit(25);
+  warnDemoData("la lista de pacientes de la IPS");
   return {
     patients: applyRiskFilter(mockPatients, filter),
     alerts: ((alerts as AlertRecord[]) ?? []).map((alert) => ({
@@ -122,8 +127,12 @@ export async function getIpsDashboardData(filter?: RiskLevel | "all") {
 
 export async function getPatientDetail(patientId: string) {
   noStore();
+  warnDemoData("la identidad del paciente y sus alertas en el detalle");
   const patient = mockPatients.find((item) => item.id === patientId) ?? mockPatients[0];
   const dashboard = await getPatientDashboardData(patient.id);
+  if (!dashboard.vitals.length || !dashboard.prediction || !dashboard.report) {
+    warnDemoData("signos, predicción o reporte del detalle de paciente (la consulta real vino vacía)");
+  }
   return {
     patient,
     vitals: dashboard.vitals.length ? dashboard.vitals : mockVitals,
@@ -141,6 +150,7 @@ export async function getAdminDashboardData(): Promise<{
 }> {
   noStore();
   const modelMetrics = await safeModelMetrics();
+  warnDemoData("las métricas del sistema, los documentos RAG y la lista de usuarios");
   return {
     metrics: mockSystemMetrics,
     modelMetrics,
@@ -156,8 +166,10 @@ export async function safeModelMetrics(): Promise<ModelMetric[]> {
       return response.results as ModelMetric[];
     }
   } catch {
+    warnDemoData("las métricas de modelos ML (el backend no respondió)");
     return mockModelMetrics;
   }
+  warnDemoData("las métricas de modelos ML (el backend respondió sin resultados)");
   return mockModelMetrics;
 }
 
