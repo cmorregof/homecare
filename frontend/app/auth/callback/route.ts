@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { BRAND_NAME } from "@/lib/brand";
 import type { UserRole } from "@/types";
 
 const ROLE_HOME: Record<UserRole, string> = {
@@ -44,7 +45,7 @@ export async function GET(request: NextRequest) {
   const role = normalizeRole(metadata.role);
   const profilePayload = {
     id: user.id,
-    full_name: String(metadata.full_name || user.email || "Usuario HomecareCCV"),
+    full_name: String(metadata.full_name || user.email || `Usuario ${BRAND_NAME}`),
     document_id: metadata.document_id ? String(metadata.document_id) : null,
     role,
   };

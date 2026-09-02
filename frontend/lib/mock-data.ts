@@ -31,7 +31,7 @@ export const mockProfiles: Profile[] = [
   {
     id: "admin-demo-1",
     role: "admin",
-    full_name: "Administrador HomecareCCV",
+    full_name: "Administrador CARMEN",
     email: "admin@homecareccv.co",
   },
 ];

@@ -28,7 +28,7 @@ export default async function IpsDashboardPage({
   return (
     <AppShell role="ips" title="Dashboard IPS" subtitle="Pacientes priorizados por riesgo clínico">
       <MetricGrid>
-        <MetricCard label="Pacientes activos" value={patients.length} />
+        <MetricCard label="Pacientes activos" value={patients.length} tone="featured" detail="Bajo seguimiento" />
         <MetricCard label="Críticos" value={critical} tone="danger" />
         <MetricCard label="Alto riesgo" value={high} tone="warning" />
         <MetricCard label="Alertas abiertas" value={alerts.filter((alert) => !alert.acknowledged).length} />

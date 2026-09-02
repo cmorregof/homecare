@@ -71,7 +71,7 @@ export function ChatShell({
     <section className="flex min-h-[620px] flex-col rounded-lg border border-border bg-surface shadow-sm">
       <div className="border-b border-border px-5 py-4">
         <p className="font-bold text-ink">Carmen</p>
-        <p className="text-sm text-muted">Agente Enfermera HomecareCCV</p>
+        <p className="text-sm text-muted">Enfermera virtual</p>
       </div>
       <div className="flex-1 space-y-3 overflow-y-auto p-5">
         {messages.map((message) => (
