@@ -5,6 +5,7 @@ import { VitalsLineChart } from "@/components/charts/vitals-line-chart";
 import { RiskPanel } from "@/components/risk/risk-badge";
 import { AppShell } from "@/components/ui/app-shell";
 import { SectionTitle } from "@/components/ui/page-header";
+import { WelcomeBanner } from "@/components/ui/welcome-banner";
 import { Card, CardTitle, VitalCard } from "@/components/vitals/vital-card";
 import { requireRole } from "@/lib/auth";
 import { getPatientDashboardData } from "@/lib/data";
@@ -38,6 +39,7 @@ export default async function PatientDashboardPage() {
         </Link>
       }
     >
+      <WelcomeBanner />
       <div className="grid gap-5 xl:grid-cols-[360px_1fr]">
         <div className="space-y-5">
           <RiskPanel level={riskLevel} probability={probability} />
