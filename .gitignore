@@ -53,3 +53,9 @@ backend/catboost_info/
 coverage/
 htmlcov/
 backend/rag/documents/_originales/
+
+# LaTeX auxiliares del manual (el PDF sí se versiona)
+docs/manual/*.aux
+docs/manual/*.log
+docs/manual/*.out
+docs/manual/*.toc
