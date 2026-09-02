@@ -1,8 +1,17 @@
 import Link from "next/link";
 
 import { AppShell } from "@/components/ui/app-shell";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Table, TableWrap, Td, Th, Tr } from "@/components/ui/table";
 import { requireRole } from "@/lib/auth";
 import { getPatientHistory } from "@/lib/data";
+import { cn, formatClinical } from "@/lib/utils";
+
+const PAGER = cn(
+  "inline-flex items-center rounded-md border border-border bg-surface px-3.5 py-2 text-base font-semibold text-ink transition-colors hover:bg-canvas",
+  "outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2",
+  "aria-disabled:pointer-events-none aria-disabled:opacity-50",
+);
 
 export default async function PatientHistoryPage({
   searchParams,
@@ -16,47 +25,57 @@ export default async function PatientHistoryPage({
 
   return (
     <AppShell role="patient" title="Historial de signos vitales">
-      <section className="overflow-hidden rounded-md border border-slate-200 bg-white">
-        <table className="w-full min-w-[760px] text-left text-sm">
-          <thead className="border-b border-slate-200 bg-slate-50 text-slate-600">
-            <tr>
-              <th className="px-4 py-3 font-semibold">Fecha</th>
-              <th className="px-4 py-3 font-semibold">Presión</th>
-              <th className="px-4 py-3 font-semibold">Pulso</th>
-              <th className="px-4 py-3 font-semibold">SpO2</th>
-              <th className="px-4 py-3 font-semibold">Glucosa</th>
-              <th className="px-4 py-3 font-semibold">Síntomas</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {rows.map((row) => (
-              <tr key={row.id}>
-                <td className="px-4 py-3">{formatDate(row.recorded_at)}</td>
-                <td className="px-4 py-3">{row.systolic_bp}/{row.diastolic_bp}</td>
-                <td className="px-4 py-3">{row.heart_rate}</td>
-                <td className="px-4 py-3">{row.oxygen_saturation ?? "Sin dato"}</td>
-                <td className="px-4 py-3">{row.glucose ?? "Sin dato"}</td>
-                <td className="px-4 py-3">Dolor {row.pain_score ?? 0}, mareo {row.dizziness_score ?? 0}, disnea {row.dyspnea_score ?? 0}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
-      <div className="mt-4 flex items-center justify-between">
+      <TableWrap>
+        {rows.length === 0 ? (
+          <EmptyState>Todavía no hay mediciones registradas.</EmptyState>
+        ) : (
+          <div className="min-w-[760px]">
+            <Table>
+              <thead>
+                <tr>
+                  <Th>Fecha</Th>
+                  <Th>Presión</Th>
+                  <Th>Pulso</Th>
+                  <Th>SpO2</Th>
+                  <Th>Glucosa</Th>
+                  <Th>Síntomas</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <Tr key={row.id}>
+                    <Td>{formatDate(row.recorded_at)}</Td>
+                    <Td>{row.systolic_bp}/{row.diastolic_bp}</Td>
+                    <Td>{row.heart_rate}</Td>
+                    <Td>{row.oxygen_saturation ?? "Sin dato"}</Td>
+                    <Td>{row.glucose ?? "Sin dato"}</Td>
+                    <Td className="text-muted">
+                      Dolor {row.pain_score ?? 0}, mareo {row.dizziness_score ?? 0}, disnea {row.dyspnea_score ?? 0}
+                    </Td>
+                  </Tr>
+                ))}
+              </tbody>
+            </Table>
+          </div>
+        )}
+      </TableWrap>
+      <nav className="mt-4 flex items-center justify-between" aria-label="Paginación del historial">
         <Link
           href={`/patient/history?page=${Math.max(1, page - 1)}`}
-          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700"
+          aria-disabled={page <= 1}
+          className={PAGER}
         >
           Anterior
         </Link>
-        <p className="text-sm text-slate-600">Página {page} de {totalPages}</p>
+        <p className="text-base text-muted">Página {page} de {totalPages}</p>
         <Link
           href={`/patient/history?page=${Math.min(totalPages, page + 1)}`}
-          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700"
+          aria-disabled={page >= totalPages}
+          className={PAGER}
         >
           Siguiente
         </Link>
-      </div>
+      </nav>
     </AppShell>
   );
 }
@@ -65,8 +84,5 @@ function formatDate(value?: string) {
   if (!value) {
     return "Sin fecha";
   }
-  return new Intl.DateTimeFormat("es-CO", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
+  return formatClinical(value, { dateStyle: "medium", timeStyle: "short" });
 }

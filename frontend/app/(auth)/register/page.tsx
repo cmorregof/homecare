@@ -3,8 +3,12 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
+import { UserPlus } from "lucide-react";
 
+import { Alert } from "@/components/alerts/alert-row";
+import { AuthShell } from "@/components/ui/auth-shell";
 import { Button } from "@/components/ui/button";
+import { Field, FieldRow, SelectField } from "@/components/ui/field";
 import { getAuthCallbackUrl } from "@/lib/site-url";
 import { createBrowserSupabaseClient, isSupabaseConfigured } from "@/lib/supabase";
 import type { UserRole } from "@/types";
@@ -74,41 +78,61 @@ export default function RegisterPage() {
   }
 
   return (
-    <main className="grid min-h-screen place-items-center bg-[#f5f8f7] px-4 py-10 text-ink">
-      <section className="w-full max-w-xl rounded-md border border-slate-200 bg-white p-6 shadow-sm">
-        <h1 className="text-2xl font-semibold tracking-normal">Registro HomecareCCV</h1>
-        <form onSubmit={handleSubmit} className="mt-6 grid gap-4 sm:grid-cols-2">
-          <label className="block text-sm font-medium text-slate-700 sm:col-span-2">
-            Nombre completo
-            <input className="mt-1 h-11 w-full rounded-md border border-slate-300 px-3" value={fullName} onChange={(event) => setFullName(event.target.value)} required />
-          </label>
-          <label className="block text-sm font-medium text-slate-700">
-            Documento
-            <input className="mt-1 h-11 w-full rounded-md border border-slate-300 px-3" value={documentId} onChange={(event) => setDocumentId(event.target.value)} required />
-          </label>
-          <label className="block text-sm font-medium text-slate-700">
-            Rol
-            <select className="mt-1 h-11 w-full rounded-md border border-slate-300 px-3" value={role} onChange={(event) => setRole(event.target.value as UserRole)}>
-              <option value="patient">Paciente</option>
-              <option value="ips">IPS</option>
-              <option value="admin">Admin</option>
-            </select>
-          </label>
-          <label className="block text-sm font-medium text-slate-700">
-            Correo
-            <input className="mt-1 h-11 w-full rounded-md border border-slate-300 px-3" value={email} onChange={(event) => setEmail(event.target.value)} type="email" required />
-          </label>
-          <label className="block text-sm font-medium text-slate-700">
-            Contraseña
-            <input className="mt-1 h-11 w-full rounded-md border border-slate-300 px-3" value={password} onChange={(event) => setPassword(event.target.value)} type="password" required />
-          </label>
-          {message ? <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 sm:col-span-2">{message}</p> : null}
-          <div className="flex items-center justify-between gap-3 sm:col-span-2">
-            <Link href="/login" className="text-sm font-medium text-clinical">Volver</Link>
-            <Button type="submit" disabled={loading}>Crear cuenta</Button>
-          </div>
-        </form>
-      </section>
-    </main>
+    <AuthShell wide>
+      <h1 className="text-3xl font-bold text-ink">Registro HomecareCCV</h1>
+      <p className="mt-1 text-base text-muted">Crea la cuenta con la que harás seguimiento.</p>
+
+      <form onSubmit={handleSubmit} className="mt-6">
+        <Field
+          label="Nombre completo"
+          required
+          value={fullName}
+          onChange={(event) => setFullName(event.target.value)}
+        />
+        <FieldRow>
+          <Field
+            label="Documento"
+            required
+            value={documentId}
+            onChange={(event) => setDocumentId(event.target.value)}
+          />
+          <SelectField label="Rol" value={role} onChange={(event) => setRole(event.target.value as UserRole)}>
+            <option value="patient">Paciente</option>
+            <option value="ips">IPS</option>
+            <option value="admin">Admin</option>
+          </SelectField>
+        </FieldRow>
+        <FieldRow>
+          <Field
+            label="Correo"
+            type="email"
+            required
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+          />
+          <Field
+            label="Contraseña"
+            type="password"
+            required
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+          />
+        </FieldRow>
+        {message ? <Alert tone="error">{message}</Alert> : null}
+        <Button type="submit" disabled={loading} full>
+          <UserPlus className="h-4 w-4" aria-hidden />
+          Crear cuenta
+        </Button>
+      </form>
+
+      <p className="mt-5 text-center text-base text-muted">
+        <Link
+          href="/login"
+          className="font-semibold text-brand outline-none hover:underline focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
+        >
+          Ya tengo cuenta
+        </Link>
+      </p>
+    </AuthShell>
   );
 }

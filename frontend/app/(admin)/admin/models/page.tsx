@@ -1,4 +1,6 @@
 import { AppShell } from "@/components/ui/app-shell";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Table, TableWrap, Td, Th, Tr } from "@/components/ui/table";
 import { requireRole } from "@/lib/auth";
 import { safeModelMetrics } from "@/lib/data";
 
@@ -8,30 +10,36 @@ export default async function AdminModelsPage() {
 
   return (
     <AppShell role="admin" title="Performance de modelos ML">
-      <section className="overflow-hidden rounded-md border border-slate-200 bg-white">
-        <table className="w-full min-w-[780px] text-left text-sm">
-          <thead className="border-b border-slate-200 bg-slate-50 text-slate-600">
-            <tr>
-              <th className="px-4 py-3 font-semibold">Modelo</th>
-              <th className="px-4 py-3 font-semibold">Estado</th>
-              <th className="px-4 py-3 font-semibold">Filas</th>
-              <th className="px-4 py-3 font-semibold">F1 validación</th>
-              <th className="px-4 py-3 font-semibold">F1 test</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {models.map((model) => (
-              <tr key={model.model}>
-                <td className="px-4 py-3 font-medium text-ink">{model.model}</td>
-                <td className="px-4 py-3">{model.status}</td>
-                <td className="px-4 py-3">{model.train_rows_used?.toLocaleString("es-CO") ?? "Sin dato"}</td>
-                <td className="px-4 py-3">{formatMetric(model.validation?.f1_macro)}</td>
-                <td className="px-4 py-3">{formatMetric(model.test?.f1_macro)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
+      <TableWrap>
+        {models.length === 0 ? (
+          <EmptyState>No hay métricas de modelos disponibles.</EmptyState>
+        ) : (
+          <div className="min-w-[780px]">
+            <Table>
+              <thead>
+                <tr>
+                  <Th>Modelo</Th>
+                  <Th>Estado</Th>
+                  <Th>Filas</Th>
+                  <Th>F1 validación</Th>
+                  <Th>F1 test</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {models.map((model) => (
+                  <Tr key={model.model}>
+                    <Td className="font-semibold text-ink">{model.model}</Td>
+                    <Td className="text-muted">{model.status}</Td>
+                    <Td>{model.train_rows_used?.toLocaleString("es-CO") ?? "Sin dato"}</Td>
+                    <Td>{formatMetric(model.validation?.f1_macro)}</Td>
+                    <Td>{formatMetric(model.test?.f1_macro)}</Td>
+                  </Tr>
+                ))}
+              </tbody>
+            </Table>
+          </div>
+        )}
+      </TableWrap>
     </AppShell>
   );
 }
