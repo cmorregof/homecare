@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
+
+import { BRAND_FULL } from "@/lib/brand";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "HomecareCCV",
+  title: BRAND_FULL,
   description: "Monitoreo domiciliario con agentes IA para pacientes cardio-cerebrovasculares.",
 };
 

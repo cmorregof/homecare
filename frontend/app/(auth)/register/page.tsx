@@ -9,6 +9,7 @@ import { Alert } from "@/components/alerts/alert-row";
 import { AuthShell } from "@/components/ui/auth-shell";
 import { Button } from "@/components/ui/button";
 import { Field, FieldRow, SelectField } from "@/components/ui/field";
+import { BRAND_NAME } from "@/lib/brand";
 import { getAuthCallbackUrl } from "@/lib/site-url";
 import { createBrowserSupabaseClient, isSupabaseConfigured } from "@/lib/supabase";
 import type { UserRole } from "@/types";
@@ -69,7 +70,7 @@ export default function RegisterPage() {
         return;
       }
       const params = new URLSearchParams({
-        message: "Revisa tu correo y confirma la cuenta para ingresar a HomecareCCV.",
+        message: `Revisa tu correo y confirma la cuenta para ingresar a ${BRAND_NAME}.`,
       });
       router.push(`/login?${params.toString()}`);
     } finally {
@@ -79,7 +80,7 @@ export default function RegisterPage() {
 
   return (
     <AuthShell wide>
-      <h1 className="text-3xl font-bold text-ink">Registro HomecareCCV</h1>
+      <h1 className="text-3xl font-bold text-ink">Crear cuenta en {BRAND_NAME}</h1>
       <p className="mt-1 text-base text-muted">Crea la cuenta con la que harás seguimiento.</p>
 
       <form onSubmit={handleSubmit} className="mt-6">

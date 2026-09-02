@@ -17,7 +17,7 @@ export default async function AdminDashboardPage() {
   return (
     <AppShell role="admin" title="Métricas del sistema">
       <MetricGrid>
-        <MetricCard label="Pacientes" value={metrics.totalPatients} />
+        <MetricCard label="Pacientes" value={metrics.totalPatients} tone="featured" detail="Registrados en la plataforma" />
         <MetricCard label="Reportes hoy" value={metrics.reportsToday} />
         <MetricCard label="Alertas hoy" value={metrics.alertsToday} tone="warning" />
         <MetricCard label="Críticas" value={metrics.criticalAlerts} tone="danger" />

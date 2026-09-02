@@ -1,4 +1,6 @@
-import { HeartPulse } from "lucide-react";
+import { Heart } from "lucide-react";
+
+import { BRAND_NAME, BRAND_TAGLINE } from "@/lib/brand";
 
 import { cn } from "@/lib/utils";
 
@@ -16,9 +18,10 @@ export function AuthShell({ wide = false, children }: { wide?: boolean; children
   return (
     <main className="grid min-h-screen grid-cols-1 bg-canvas lg:grid-cols-2">
       <div className="flex flex-col justify-center bg-gradient-to-br from-brand to-brand-dark px-8 py-12 text-white lg:px-14 lg:py-16">
-        <HeartPulse className="mb-6 h-16 w-16" aria-hidden />
-        <h2 className="text-5xl font-extrabold leading-[1.05]">HomecareCCV</h2>
-        <p className="mt-4 max-w-[460px] text-lg leading-relaxed text-white/90">
+        <Heart className="mb-6 h-16 w-16 fill-current" aria-hidden />
+        <h2 className="text-5xl font-extrabold leading-[1.05]">{BRAND_NAME}</h2>
+        <p className="mt-2 text-xl font-semibold text-white/90">{BRAND_TAGLINE}</p>
+        <p className="mt-4 max-w-[460px] text-lg leading-relaxed text-white/80">
           Monitoreo cardiovascular domiciliario con seguimiento clínico continuo y alertas en tiempo real.
         </p>
       </div>

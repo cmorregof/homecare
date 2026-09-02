@@ -8,7 +8,7 @@ import {
   Bell,
   Bot,
   Database,
-  HeartPulse,
+  Heart,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 
 import { DemoBanner } from "@/components/ui/demo-banner";
+import { BRAND_NAME, BRAND_TAGLINE } from "@/lib/brand";
 import { PageHeader } from "@/components/ui/page-header";
 import { cn } from "@/lib/utils";
 import type { UserRole } from "@/types";
@@ -99,8 +100,11 @@ function SidebarBody({
   return (
     <>
       <div className="mb-8 flex items-center gap-2.5 px-2">
-        <HeartPulse className="h-6 w-6 shrink-0 text-brand" aria-hidden />
-        <span className="text-xl font-extrabold text-ink">HomecareCCV</span>
+        <Heart className="h-6 w-6 shrink-0 fill-current text-brand" aria-hidden />
+        <span className="flex min-w-0 flex-col leading-tight">
+          <span className="text-xl font-extrabold text-ink">{BRAND_NAME}</span>
+          <span className="text-xs text-muted">{BRAND_TAGLINE}</span>
+        </span>
       </div>
 
       <nav aria-label="Navegación principal" className="flex flex-1 flex-col gap-1">
@@ -224,8 +228,8 @@ export function AppShell({
         >
           <Menu className="h-5 w-5" aria-hidden />
         </button>
-        <HeartPulse className="h-5 w-5 shrink-0 text-brand" aria-hidden />
-        <span className="truncate text-base font-extrabold text-ink">HomecareCCV</span>
+        <Heart className="h-5 w-5 shrink-0 fill-current text-brand" aria-hidden />
+        <span className="truncate text-base font-extrabold text-ink">{BRAND_NAME}</span>
       </div>
 
       {/* Mobile drawer */}

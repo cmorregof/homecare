@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { MessageCircle, Send } from "lucide-react";
+import { MessageCircle, Plus, Send } from "lucide-react";
 
 import { VitalsLineChart } from "@/components/charts/vitals-line-chart";
 import { RiskPanel } from "@/components/risk/risk-badge";
@@ -27,7 +27,17 @@ export default async function PatientDashboardPage() {
   const probability = prediction?.risk_probability ?? 0;
 
   return (
-    <AppShell role="patient" title="Panel del paciente" subtitle={profile?.full_name ?? "Paciente"}>
+    <AppShell
+      role="patient"
+      title="Panel del paciente"
+      subtitle={profile?.full_name ?? "Paciente"}
+      actions={
+        <Link href="/patient/vitals/new" className={cn(LINK_BUTTON, "border-transparent bg-brand text-white hover:opacity-[0.92]")}>
+          <Plus className="h-4 w-4" aria-hidden />
+          Nueva medición
+        </Link>
+      }
+    >
       <div className="grid gap-5 xl:grid-cols-[360px_1fr]">
         <div className="space-y-5">
           <RiskPanel level={riskLevel} probability={probability} />

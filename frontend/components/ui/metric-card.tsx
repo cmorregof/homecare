@@ -11,6 +11,13 @@ import { cn } from "@/lib/utils";
  * tint has to agree with the risk palette rather than with the brand.
  */
 const TONES = {
+  /**
+   * The reference's `.kpi.primary` (global.css:459-462): a gradient tile that
+   * lifts the headline figure out of the row. Theirs runs #D32F2F -> #9A0007;
+   * ours runs through the brand blues, because that red is the critical-risk
+   * fill and a patient count is not a verdict.
+   */
+  featured: "border-transparent bg-gradient-to-br from-brand to-brand-dark",
   neutral: "border-border bg-surface",
   good: "border-risk-low/30 bg-risk-low/[0.08]",
   warning: "border-risk-moderate/40 bg-risk-moderate/10",
@@ -30,9 +37,20 @@ export function MetricCard({
 }) {
   return (
     <div className={cn("rounded-lg border p-5 shadow-sm", TONES[tone])}>
-      <p className="text-xs font-semibold uppercase tracking-[0.04em] text-muted">{label}</p>
-      <p className="mt-1.5 text-4xl font-bold text-ink">{value}</p>
-      {detail ? <p className="mt-1 text-xs text-muted">{detail}</p> : null}
+      <p
+        className={cn(
+          "text-xs font-semibold uppercase tracking-[0.04em]",
+          tone === "featured" ? "text-white/85" : "text-muted",
+        )}
+      >
+        {label}
+      </p>
+      <p className={cn("mt-1.5 text-4xl font-bold", tone === "featured" ? "text-white" : "text-ink")}>
+        {value}
+      </p>
+      {detail ? (
+        <p className={cn("mt-1 text-xs", tone === "featured" ? "text-white/85" : "text-muted")}>{detail}</p>
+      ) : null}
     </div>
   );
 }
