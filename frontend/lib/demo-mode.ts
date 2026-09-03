@@ -13,16 +13,17 @@ import type { UserRole } from "@/types";
  *
  * 2. Supabase IS configured and some reads are STILL mocked, unconditionally:
  *
- *      lib/data.ts:115   patients        — the IPS patient list is always mock
- *      lib/data.ts:118   patient_name    — alert names resolved against mocks
- *      lib/data.ts:125   patient         — patient detail identity
- *      lib/data.ts:129   vitals          — when the real query comes back empty
- *      lib/data.ts:130   prediction      — idem
- *      lib/data.ts:131   report          — idem
- *      lib/data.ts:132   alerts          — patient alerts are always mock
- *      lib/data.ts:145   metrics         — admin system metrics
- *      lib/data.ts:147   ragDocuments    — admin RAG list
- *      lib/data.ts:148   profiles        — admin user list
+ *      lib/data.ts:121   patients        — the IPS patient list is always mock
+ *      lib/data.ts:124   patient_name    — alert names resolved against mocks
+ *      lib/data.ts:132   patient         — patient detail identity
+ *      lib/data.ts:139   vitals          — when the real query comes back empty
+ *      lib/data.ts:140   prediction      — idem
+ *      lib/data.ts:141   report          — idem
+ *      lib/data.ts:142   alerts          — patient alerts are always mock
+ *
+ * The admin screens are no longer in that list: metrics, RAG documents and the
+ * user directory are read from Supabase whenever it is configured, and a failed
+ * read now yields an empty list rather than mock rows.
  *
  * Case 2 is the dangerous one: nothing about the environment reveals it, so a
  * banner keyed only on `isSupabaseConfigured()` would report "live" while a
@@ -33,7 +34,7 @@ import type { UserRole } from "@/types";
 const ALWAYS_MOCK: Record<UserRole, string[]> = {
   patient: [],
   ips: ["la lista de pacientes", "las alertas de cada paciente"],
-  admin: ["las métricas del sistema", "los documentos RAG", "la lista de usuarios"],
+  admin: [],
 };
 
 export type DemoNotice =

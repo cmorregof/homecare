@@ -10,12 +10,12 @@ const CARD_LINK =
   "text-sm font-semibold text-brand outline-none hover:underline focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2";
 
 export default async function AdminDashboardPage() {
-  await requireRole("admin");
+  const viewer = await requireRole("admin");
   const { metrics, modelMetrics, ragDocuments } = await getAdminDashboardData();
   const bestModel = [...modelMetrics].sort((a, b) => (b.validation?.f1_macro ?? 0) - (a.validation?.f1_macro ?? 0))[0];
 
   return (
-    <AppShell role="admin" title="Métricas del sistema">
+    <AppShell role="admin" title="Métricas del sistema" userName={viewer.full_name}>
       <MetricGrid>
         <MetricCard label="Pacientes" value={metrics.totalPatients} tone="featured" detail="Registrados en la plataforma" />
         <MetricCard label="Reportes hoy" value={metrics.reportsToday} />

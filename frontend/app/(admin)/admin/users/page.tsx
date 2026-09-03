@@ -4,11 +4,11 @@ import { requireRole } from "@/lib/auth";
 import { getAdminDashboardData } from "@/lib/data";
 
 export default async function AdminUsersPage() {
-  await requireRole("admin");
+  const viewer = await requireRole("admin");
   const { profiles } = await getAdminDashboardData();
 
   return (
-    <AppShell role="admin" title="Gestión de usuarios">
+    <AppShell role="admin" title="Gestión de usuarios" userName={viewer.full_name}>
       <UserManagement initialProfiles={profiles} />
     </AppShell>
   );

@@ -9,12 +9,12 @@ import { requireRole } from "@/lib/auth";
 import { getPatientDetail } from "@/lib/data";
 
 export default async function IpsPatientDetailPage({ params }: { params: { id: string } }) {
-  await requireRole("ips");
+  const viewer = await requireRole("ips");
   const { patient, vitals, prediction, report, alerts } = await getPatientDetail(params.id);
   const latest = vitals[0] ?? patient.latest_vitals ?? {};
 
   return (
-    <AppShell role="ips" title={patient.full_name} subtitle={`${patient.city}, ${patient.department}`}>
+    <AppShell role="ips" title={patient.full_name} subtitle={`${patient.city}, ${patient.department}`} userName={viewer.full_name}>
       <div className="grid gap-5 xl:grid-cols-[340px_1fr]">
         <div className="space-y-5">
           <RiskPanel level={prediction.risk_level} probability={prediction.risk_probability} />

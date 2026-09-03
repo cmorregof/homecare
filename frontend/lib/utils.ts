@@ -37,3 +37,20 @@ export function formatClinical(value: string | Date, options: Intl.DateTimeForma
     .format(new Date(value))
     .replace(/[\u00a0\u202f]/g, " ");
 }
+
+/**
+ * Instant at which the current clinical day began, as an ISO string.
+ *
+ * "Reportes hoy" and "Alertas hoy" mean today in Colombia, not today in UTC.
+ * Filtering on the server's own midnight would move the boundary five hours,
+ * so between 19:00 and 24:00 Bogotá every reading would already be counted as
+ * tomorrow's. Colombia has no DST, so the offset is a constant -05:00 and the
+ * arithmetic below needs no timezone database.
+ */
+export function startOfClinicalDay(now: Date = new Date()): string {
+  const shifted = new Date(now.getTime() - 5 * 60 * 60 * 1000);
+  const year = shifted.getUTCFullYear();
+  const month = String(shifted.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(shifted.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}T05:00:00.000Z`;
+}

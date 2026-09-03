@@ -19,14 +19,14 @@ export default async function IpsDashboardPage({
 }: {
   searchParams?: { risk?: RiskLevel | "all" };
 }) {
-  await requireRole("ips");
+  const viewer = await requireRole("ips");
   const active = searchParams?.risk ?? "all";
   const { patients, alerts } = await getIpsDashboardData(active);
   const critical = patients.filter((patient) => patient.latest_risk === "critical").length;
   const high = patients.filter((patient) => patient.latest_risk === "high").length;
 
   return (
-    <AppShell role="ips" title="Dashboard IPS" subtitle="Pacientes priorizados por riesgo clínico">
+    <AppShell role="ips" title="Dashboard IPS" subtitle="Pacientes priorizados por riesgo clínico" userName={viewer.full_name}>
       <MetricGrid>
         <MetricCard label="Pacientes activos" value={patients.length} tone="featured" detail="Bajo seguimiento" />
         <MetricCard label="Críticos" value={critical} tone="danger" />
