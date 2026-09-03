@@ -2,15 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { BRAND_NAME } from "@/lib/brand";
+import { ROLE_HOME, toPublicRole } from "@/lib/roles";
 import type { UserRole } from "@/types";
-
-const ROLE_HOME: Record<UserRole, string> = {
-  patient: "/patient/dashboard",
-  ips: "/ips/dashboard",
-  admin: "/admin/dashboard",
-};
-
-const VALID_ROLES = new Set<UserRole>(["patient", "ips", "admin"]);
 
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
@@ -42,27 +35,46 @@ export async function GET(request: NextRequest) {
   }
 
   const metadata = user.user_metadata ?? {};
-  const role = normalizeRole(metadata.role);
-  const profilePayload = {
-    id: user.id,
-    full_name: String(metadata.full_name || user.email || `Usuario ${BRAND_NAME}`),
-    document_id: metadata.document_id ? String(metadata.document_id) : null,
-    role,
-  };
+  const fullName = String(metadata.full_name || user.email || `Usuario ${BRAND_NAME}`);
+  const documentId = metadata.document_id ? String(metadata.document_id) : null;
 
-  const { error: profileError } = await supabase.from("profiles").upsert(profilePayload, { onConflict: "id" });
+  // Does the profile already exist? Two different writes follow from the answer,
+  // and conflating them is what made this route dangerous.
+  const { data: existing } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+  const existingRole = (existing as { role: UserRole } | null)?.role;
+
+  if (existingRole) {
+    // Confirming an email must never restate the role. The previous upsert did,
+    // which meant an administrator created from /admin/users was demoted back to
+    // whatever `user_metadata.role` said the moment they followed a confirmation
+    // link. Since the role lock landed, that write is refused outright and the
+    // user is bounced to the login screen with a database error instead.
+    const { error: updateError } = await supabase
+      .from("profiles")
+      .update({ full_name: fullName, document_id: documentId })
+      .eq("id", user.id);
+    if (updateError) {
+      return redirectToLogin(requestUrl, updateError.message);
+    }
+    return NextResponse.redirect(new URL(ROLE_HOME[existingRole], requestUrl.origin));
+  }
+
+  // First confirmation. `user_metadata` is written by whoever called signUp(),
+  // so the role in it is the caller's claim, not a fact: 'admin' there was
+  // enough to become one. toPublicRole refuses anything outside patient/ips.
+  const role = toPublicRole(metadata.role);
+  const { error: profileError } = await supabase
+    .from("profiles")
+    .insert({ id: user.id, full_name: fullName, document_id: documentId, role });
   if (profileError) {
     return redirectToLogin(requestUrl, profileError.message);
   }
 
   return NextResponse.redirect(new URL(ROLE_HOME[role], requestUrl.origin));
-}
-
-function normalizeRole(value: unknown): UserRole {
-  if (typeof value === "string" && VALID_ROLES.has(value as UserRole)) {
-    return value as UserRole;
-  }
-  return "patient";
 }
 
 function redirectToLogin(requestUrl: URL, message: string) {

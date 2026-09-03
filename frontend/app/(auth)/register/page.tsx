@@ -10,15 +10,12 @@ import { AuthShell } from "@/components/ui/auth-shell";
 import { Button } from "@/components/ui/button";
 import { Field, FieldRow, SelectField } from "@/components/ui/field";
 import { BRAND_NAME } from "@/lib/brand";
+import { ROLE_HOME, toPublicRole, type PublicRole } from "@/lib/roles";
 import { getAuthCallbackUrl } from "@/lib/site-url";
 import { createBrowserSupabaseClient, isSupabaseConfigured } from "@/lib/supabase";
-import type { UserRole } from "@/types";
 
-const ROLE_HOME: Record<UserRole, string> = {
-  patient: "/patient/dashboard",
-  ips: "/ips/dashboard",
-  admin: "/admin/dashboard",
-};
+/** Shortest password Supabase Auth accepts by default. */
+const MIN_PASSWORD_LENGTH = 6;
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -26,14 +23,26 @@ export default function RegisterPage() {
   const [documentId, setDocumentId] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<UserRole>("patient");
+  const [passwordConfirm, setPasswordConfirm] = useState("");
+  const [role, setRole] = useState<PublicRole>("patient");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setMessage("");
     if (!isSupabaseConfigured()) {
       setMessage("Modo demo activo. Configura Supabase para crear usuarios reales.");
+      return;
+    }
+    // Checked before the request so a mistyped password is caught here rather
+    // than becoming an account nobody can sign in to.
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      setMessage(`La contraseña debe tener al menos ${MIN_PASSWORD_LENGTH} caracteres.`);
+      return;
+    }
+    if (password !== passwordConfirm) {
+      setMessage("Las dos contraseñas no coinciden.");
       return;
     }
     setLoading(true);
@@ -47,7 +56,7 @@ export default function RegisterPage() {
           data: {
             full_name: fullName,
             document_id: documentId,
-            role,
+            role: toPublicRole(role),
           },
         },
       });
@@ -60,7 +69,7 @@ export default function RegisterPage() {
           id: data.user.id,
           full_name: fullName,
           document_id: documentId,
-          role,
+          role: toPublicRole(role),
         });
         if (profileError) {
           setMessage(profileError.message);
@@ -97,10 +106,14 @@ export default function RegisterPage() {
             value={documentId}
             onChange={(event) => setDocumentId(event.target.value)}
           />
-          <SelectField label="Rol" value={role} onChange={(event) => setRole(event.target.value as UserRole)}>
+          <SelectField
+            label="Rol"
+            value={role}
+            onChange={(event) => setRole(toPublicRole(event.target.value))}
+            helper="Las cuentas de administración las crea un administrador."
+          >
             <option value="patient">Paciente</option>
             <option value="ips">IPS</option>
-            <option value="admin">Admin</option>
           </SelectField>
         </FieldRow>
         <FieldRow>
@@ -115,10 +128,21 @@ export default function RegisterPage() {
             label="Contraseña"
             type="password"
             required
+            minLength={MIN_PASSWORD_LENGTH}
+            autoComplete="new-password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
+            helper={`Mínimo ${MIN_PASSWORD_LENGTH} caracteres.`}
           />
         </FieldRow>
+        <Field
+          label="Repite la contraseña"
+          type="password"
+          required
+          autoComplete="new-password"
+          value={passwordConfirm}
+          onChange={(event) => setPasswordConfirm(event.target.value)}
+        />
         {message ? <Alert tone="error">{message}</Alert> : null}
         <Button type="submit" disabled={loading} full>
           <UserPlus className="h-4 w-4" aria-hidden />
