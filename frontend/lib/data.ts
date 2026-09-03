@@ -92,15 +92,101 @@ export async function getPatientDashboardData(patientId?: string) {
   };
 }
 
-export async function getPatientHistory(page = 1, pageSize = 8) {
-  const data = await getPatientDashboardData();
+/** A measurement together with the risk the model assigned to it. */
+export type HistoryRow = VitalSigns & {
+  risk_level: RiskLevel | null;
+  risk_probability: number | null;
+};
+
+/**
+ * One page of the patient's own measurements, each carrying its risk level.
+ *
+ * The risk comes from `risk_predictions.vital_sign_id`, which is the model's
+ * verdict on that specific reading — not a value computed here. Deciding a
+ * level in the browser would put a second, divergent set of thresholds next to
+ * the backend's.
+ *
+ * This used to page through getPatientDashboardData(), which limits its query
+ * to ten rows: the history could never show an eleventh measurement and the
+ * pager capped at two pages regardless of how much the patient had recorded.
+ * It now counts and ranges over `vital_signs` directly.
+ */
+export async function getPatientHistory(page = 1, pageSize = 8): Promise<{
+  rows: HistoryRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+}> {
+  noStore();
   const start = (page - 1) * pageSize;
+
+  if (!isSupabaseConfigured()) {
+    warnDemoData("el historial de mediciones y su nivel de riesgo");
+    const rows = mockVitals.slice(start, start + pageSize).map((vital) => ({
+      ...vital,
+      risk_level: null,
+      risk_probability: null,
+    }));
+    return { rows, total: mockVitals.length, page, pageSize };
+  }
+
+  const profile = await getCurrentProfile("patient");
+  if (!profile?.id) {
+    return { rows: [], total: 0, page, pageSize };
+  }
+
+  const supabase = createServerSupabaseClient();
+  const { data, count, error } = await supabase
+    .from("vital_signs")
+    .select("*", { count: "exact" })
+    .eq("patient_id", profile.id)
+    .order("recorded_at", { ascending: false })
+    .range(start, start + pageSize - 1);
+
+  reportQueryFailure("el historial de mediciones", error);
+  const vitals = (data as VitalSigns[] | null) ?? [];
+  const risk = await riskByVitalSign(supabase, vitals);
+
   return {
-    rows: data.vitals.slice(start, start + pageSize),
-    total: data.vitals.length,
+    rows: vitals.map((vital) => ({
+      ...vital,
+      risk_level: (vital.id ? risk.get(vital.id)?.level : null) ?? null,
+      risk_probability: (vital.id ? risk.get(vital.id)?.probability : null) ?? null,
+    })),
+    total: count ?? vitals.length,
     page,
     pageSize,
   };
+}
+
+/** Looks up the prediction attached to each measurement on the current page. */
+async function riskByVitalSign(
+  supabase: ReturnType<typeof createServerSupabaseClient>,
+  vitals: VitalSigns[],
+): Promise<Map<string, { level: RiskLevel; probability: number }>> {
+  const ids = vitals.map((vital) => vital.id).filter((id): id is string => Boolean(id));
+  const byVitalSign = new Map<string, { level: RiskLevel; probability: number }>();
+  if (!ids.length) {
+    return byVitalSign;
+  }
+  const { data, error } = await supabase
+    .from("risk_predictions")
+    .select("vital_sign_id, risk_level, risk_probability, predicted_at")
+    .in("vital_sign_id", ids)
+    .order("predicted_at", { ascending: false });
+  reportQueryFailure("el nivel de riesgo del historial", error);
+
+  for (const row of (data as RiskPrediction[] | null) ?? []) {
+    // Ordered newest first, so the first prediction seen for a measurement is
+    // the current one; a re-run of the model leaves the older row in place.
+    if (row.vital_sign_id && !byVitalSign.has(row.vital_sign_id)) {
+      byVitalSign.set(row.vital_sign_id, {
+        level: row.risk_level,
+        probability: row.risk_probability,
+      });
+    }
+  }
+  return byVitalSign;
 }
 
 export async function getIpsDashboardData(filter?: RiskLevel | "all") {
