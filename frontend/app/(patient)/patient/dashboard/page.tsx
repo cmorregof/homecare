@@ -7,11 +7,10 @@ import { AppShell } from "@/components/ui/app-shell";
 import { SectionTitle } from "@/components/ui/page-header";
 import { WelcomeBanner } from "@/components/ui/welcome-banner";
 import { Card, CardTitle, VitalCard } from "@/components/vitals/vital-card";
+import { TELEGRAM_BOT_URL } from "@/lib/brand";
 import { requireRole } from "@/lib/auth";
 import { getPatientDashboardData } from "@/lib/data";
 import { cn } from "@/lib/utils";
-
-const TELEGRAM_URL = process.env.NEXT_PUBLIC_TELEGRAM_BOT_URL ?? "https://t.me/project918_homecare_bot";
 
 /** Link styled as a button. Mirrors components/ui/button.tsx for anchors. */
 const LINK_BUTTON = cn(
@@ -54,7 +53,7 @@ export default async function PatientDashboardPage() {
           </Card>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
             <Link
-              href={TELEGRAM_URL}
+              href={TELEGRAM_BOT_URL}
               className={cn(LINK_BUTTON, "border-transparent bg-brand text-white hover:opacity-[0.92]")}
             >
               <Send className="h-4 w-4" aria-hidden />

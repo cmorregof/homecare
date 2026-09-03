@@ -9,7 +9,8 @@ import { RiskPanel } from "@/components/risk/risk-badge";
 import { Button } from "@/components/ui/button";
 import { Field, FieldRow, TextareaField } from "@/components/ui/field";
 import { Card, CardTitle } from "@/components/vitals/vital-card";
-import { processVitalReport } from "@/lib/api";
+import { ApiError, processVitalReport } from "@/lib/api";
+import { TELEGRAM_BOT_URL } from "@/lib/brand";
 import type { RiskLevel, VitalSigns } from "@/types";
 
 /**
@@ -73,7 +74,7 @@ export function VitalReportForm({ patientId }: { patientId: string }) {
   const router = useRouter();
   const [form, setForm] = useState<FormState>(EMPTY);
   const [recordedAt, setRecordedAt] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState<React.ReactNode>(null);
   const [sending, setSending] = useState(false);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
 
@@ -127,7 +128,7 @@ export function VitalReportForm({ patientId }: { patientId: string }) {
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setError("");
+    setError(null);
     setOutcome(null);
     const vitalSigns = buildVitalSigns();
     if (!vitalSigns) {
@@ -142,8 +143,13 @@ export function VitalReportForm({ patientId }: { patientId: string }) {
       });
       setOutcome(result);
       router.refresh();
-    } catch {
-      setError("No fue posible enviar el reporte. Revisa tu conexión e inténtalo de nuevo.");
+    } catch (caught) {
+      if (caught instanceof ApiError) {
+        console.error(`[carmen] reporte no enviado (${caught.failure})`, caught.message);
+      } else {
+        console.error("[carmen] reporte no enviado", caught);
+      }
+      setError(describeFailure(caught));
     } finally {
       setSending(false);
     }
@@ -337,6 +343,68 @@ export function VitalReportForm({ patientId }: { patientId: string }) {
         {sending ? "Enviando…" : "Enviar reporte"}
       </Button>
     </form>
+  );
+}
+
+/**
+ * Turns a failed submission into something a patient can act on.
+ *
+ * Every branch says the same thing first, because it is the part that matters
+ * and the part the old message left out: the reading was NOT recorded. Someone
+ * who took their blood pressure, saw a vague error and closed the tab would
+ * otherwise believe their team had received it.
+ *
+ * The old message — "check your connection and try again" — blamed the reader
+ * for what was in fact a misconfigured deployment, and gave no way out. Each
+ * branch now offers Telegram, where CARMEN works regardless of the web app.
+ *
+ * The wording avoids saying the failure "was logged": it goes to the patient's
+ * own browser console, which reaches nobody. Sitting beside "your reading was
+ * not recorded" it also read as though the reading had been saved after all.
+ */
+function describeFailure(caught: unknown): React.ReactNode {
+  const notSaved = <strong className="font-semibold">Tu medición no quedó registrada.</strong>;
+
+  const viaTelegram = (
+    <>
+      {" "}
+      Puedes reportarla por{" "}
+      <a
+        href={TELEGRAM_BOT_URL}
+        target="_blank"
+        rel="noreferrer"
+        className="font-semibold underline underline-offset-2"
+      >
+        Telegram
+      </a>{" "}
+      para que tu equipo la reciba ahora.
+    </>
+  );
+
+  if (caught instanceof ApiError) {
+    if (caught.failure === "rejected") {
+      return (
+        <>
+          El servidor no aceptó la medición{caught.detail ? `: ${caught.detail}` : "."} {notSaved} Revisa
+          los valores y vuelve a enviarla.
+        </>
+      );
+    }
+    if (caught.failure === "server") {
+      return (
+        <>
+          El servidor tuvo un problema al procesar la medición. {notSaved} Inténtalo de nuevo en unos
+          minutos.{viaTelegram}
+        </>
+      );
+    }
+  }
+
+  return (
+    <>
+      No se pudo contactar al servidor. {notSaved} Revisa tu conexión; si funciona bien, el fallo está de
+      nuestro lado.{viaTelegram}
+    </>
   );
 }
 
