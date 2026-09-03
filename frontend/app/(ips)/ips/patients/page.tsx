@@ -9,11 +9,11 @@ import { requireRole } from "@/lib/auth";
 import { getIpsDashboardData } from "@/lib/data";
 
 export default async function IpsPatientsPage() {
-  await requireRole("ips");
+  const viewer = await requireRole("ips");
   const { patients } = await getIpsDashboardData("all");
 
   return (
-    <AppShell role="ips" title="Pacientes asignados">
+    <AppShell role="ips" title="Pacientes asignados" userName={viewer.full_name}>
       <TableWrap>
         <div className="flex items-center gap-2 border-b border-border px-4 py-3">
           <Search className="h-4 w-4 shrink-0 text-muted" aria-hidden />

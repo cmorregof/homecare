@@ -5,11 +5,11 @@ import { requireRole } from "@/lib/auth";
 import { safeModelMetrics } from "@/lib/data";
 
 export default async function AdminModelsPage() {
-  await requireRole("admin");
+  const viewer = await requireRole("admin");
   const models = await safeModelMetrics();
 
   return (
-    <AppShell role="admin" title="Performance de modelos ML">
+    <AppShell role="admin" title="Performance de modelos ML" userName={viewer.full_name}>
       <TableWrap>
         {models.length === 0 ? (
           <EmptyState>No hay métricas de modelos disponibles.</EmptyState>

@@ -4,11 +4,11 @@ import { requireRole } from "@/lib/auth";
 import { getAdminDashboardData } from "@/lib/data";
 
 export default async function AdminRagPage() {
-  await requireRole("admin");
+  const viewer = await requireRole("admin");
   const { ragDocuments } = await getAdminDashboardData();
 
   return (
-    <AppShell role="admin" title="Gestión documentos RAG">
+    <AppShell role="admin" title="Gestión documentos RAG" userName={viewer.full_name}>
       <RagManagement initialDocuments={ragDocuments} />
     </AppShell>
   );

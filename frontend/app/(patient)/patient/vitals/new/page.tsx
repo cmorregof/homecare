@@ -21,6 +21,7 @@ export default async function NewVitalReportPage() {
       role="patient"
       title="Nueva medición"
       subtitle="Registra tus signos vitales; Carmen evaluará el riesgo."
+      userName={profile.full_name}
     >
       <div className="max-w-3xl">
         <VitalReportForm patientId={profile.id} />

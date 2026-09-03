@@ -32,6 +32,7 @@ export default async function PatientDashboardPage() {
       role="patient"
       title="Panel del paciente"
       subtitle={profile?.full_name ?? "Paciente"}
+      userName={profile?.full_name}
       actions={
         <Link href="/patient/vitals/new" className={cn(LINK_BUTTON, "border-transparent bg-brand text-white hover:opacity-[0.92]")}>
           <Plus className="h-4 w-4" aria-hidden />

@@ -18,13 +18,13 @@ export default async function PatientHistoryPage({
 }: {
   searchParams?: { page?: string };
 }) {
-  await requireRole("patient");
+  const viewer = await requireRole("patient");
   const page = Math.max(1, Number(searchParams?.page ?? "1"));
   const { rows, total, pageSize } = await getPatientHistory(page);
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
-    <AppShell role="patient" title="Historial de signos vitales">
+    <AppShell role="patient" title="Historial de signos vitales" userName={viewer.full_name}>
       <TableWrap>
         {rows.length === 0 ? (
           <EmptyState>Todavía no hay mediciones registradas.</EmptyState>
