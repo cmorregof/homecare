@@ -24,6 +24,10 @@ class Settings:
     api_port: int = _int_env("API_PORT", 8000)
 
     openai_api_key: str | None = os.getenv("OPENAI_API_KEY")
+    # GPT-6 Astra (2026-09-03). Es un modelo razonador: no acepta `temperature`/`top_p`
+    # y el presupuesto de salida (`max_completion_tokens`) incluye tokens de razonamiento.
+    openai_model: str = os.getenv("OPENAI_MODEL") or "gpt-6-astra"
+    openai_reasoning_effort: str = os.getenv("OPENAI_REASONING_EFFORT") or "low"
     supabase_url: str | None = os.getenv("SUPABASE_URL")
     supabase_service_key: str | None = os.getenv("SUPABASE_SERVICE_KEY")
     supabase_anon_key: str | None = os.getenv("SUPABASE_ANON_KEY")

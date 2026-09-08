@@ -240,7 +240,7 @@ project. The full style guide lives in
 | Layer | Technology |
 |---|---|
 | Backend | Python 3.12, FastAPI, LangGraph, python-telegram-bot, APScheduler |
-| Agents | OpenAI GPT-4o · prompts informed by CARMEN-I aggregates |
+| Agents | OpenAI GPT-6 Astra (`gpt-6-astra`, override with `OPENAI_MODEL`) · prompts informed by CARMEN-I aggregates |
 | Risk ML | scikit-learn, LightGBM, XGBoost, CatBoost, SHAP |
 | Forecast | PyTorch (CPU) — tiny temporal transformer |
 | RAG | OpenAI `text-embedding-3-small` + Supabase pgvector |

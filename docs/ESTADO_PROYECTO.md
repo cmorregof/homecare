@@ -31,7 +31,7 @@ genera reporte clínico y alerta al médico asignado. **El clínico humano siemp
    pueden SUBIR el tier. "No model consulted: correct by construction."
 2. **Fallas ruidosas, degradación segura**: todo componente LLM/ML cae a un respaldo
    determinista auditado, con WARNING en logs. Nada falla en silencio.
-3. **LLM como interfaz**: GPT-4o redacta y escucha (voz "abuelita" colombiana, extracción
+3. **LLM como interfaz**: GPT-6 Astra (`gpt-6-astra` desde 2026-09-08; antes GPT-4o; sin `temperature`, `reasoning_effort=low`, configurable por `OPENAI_MODEL`) redacta y escucha (voz "abuelita" colombiana, extracción
    tolerante de respuestas libres), pero jamás valida rangos, cambia cifras ni decide tiers.
 4. **El pronóstico requiere verificación humana**: CARMEN-Forecast va solo al médico,
    etiquetado como preliminar, nunca al paciente.
@@ -41,7 +41,7 @@ genera reporte clínico y alerta al médico asignado. **El clínico humano siemp
 ## 2. Arquitectura desplegada
 
 **Flujo por reporte** (LangGraph): `validate_vitals → save_to_db → call_ml_script
-(+ hard overrides) → compute_forecast → call_doctor_agent (RAG + GPT-4o) →
+(+ hard overrides) → compute_forecast → call_doctor_agent (RAG + GPT-6 Astra) →
 check_alert → send_alerts → build_response (voz LLM)`.
 
 | Componente | Implementación | Estado |
@@ -50,8 +50,8 @@ check_alert → send_alerts → build_response (voz LLM)`.
 | Registro self-service | Frase natural → extrae nombre+documento → cuenta Supabase Auth + perfil → asigna médico (menos cargado, solo médicos con Telegram vinculado) → notifica al médico | ✅ producción |
 | Motor de riesgo | LightGBM 4 tiers + SHAP, en-proceso, con `apply_hard_overrides` encima (ambas rutas: modelo y fallback de reglas) | ✅ producción |
 | CARMEN-Forecast | TinyTemporalTransformer (d=96, 3 capas) servido en CPU; p(deterioro) a 6/12/24h sobre el historial bineado a 6h; alerta al médico si p(6h) ≥ 0.5 (`FORECAST_ALERT_THRESHOLD`) | ✅ producción |
-| Agente médico | GPT-4o + RAG (pgvector; fall-through léxico local), estructura de nota clínica CARMEN-I (Bloque B), NO DIAGNOSIS / NO PRESCRIPTION en prompts y verificado por tests | ✅ producción |
-| Voz de Carmen | GPT-4o reescribe borradores deterministas: abuela paisa ("¡Kiubo, mijito! 👵"), seria y protectora en crítico (guarda: si pierde urgencias/123 → plantilla dura) | ✅ producción |
+| Agente médico | GPT-6 Astra + RAG (pgvector; fall-through léxico local), estructura de nota clínica CARMEN-I (Bloque B), NO DIAGNOSIS / NO PRESCRIPTION en prompts y verificado por tests | ✅ producción |
+| Voz de Carmen | GPT-6 Astra reescribe borradores deterministas: abuela paisa ("¡Kiubo, mijito! 👵"), seria y protectora en crítico (guarda: si pierde urgencias/123 → plantilla dura) | ✅ producción |
 | Alertas | high/critical → Telegram (paciente: humanizada; médico: clínica) + Resend email; registradas en `alerts` | ✅ verificado con teléfonos reales |
 | Base RAG | 16 extractos literales (pdftotext, sin LLM) con procedencia SHA256: MINSALUD GPC HTA 2013/2017/**2025**, ACV 2015 (+NIHSS), dislipidemias 2014 (Framingham Colombia ×0.75), lineamientos ECV 2026, NEWS2 (RCP), MEWS (CC BY) | ✅ commiteado |
 | Chat web del dashboard | Mismo pipeline que Telegram vía `POST /agents/chat` | ✅ |

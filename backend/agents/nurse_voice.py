@@ -76,9 +76,9 @@ async def compose_patient_message(
         openai_client = client or AsyncOpenAI(api_key=settings.openai_api_key)
         system_prompt = NURSE_PROMPT_PATH.read_text(encoding="utf-8") + STYLE_ADDENDUM
         response = await openai_client.chat.completions.create(
-            model="gpt-4o",
-            temperature=0.6,
-            max_tokens=400,
+            model=settings.openai_model,
+            reasoning_effort=settings.openai_reasoning_effort,
+            max_completion_tokens=2000,  # incluye tokens de razonamiento
             messages=[
                 {"role": "system", "content": system_prompt},
                 {
@@ -116,9 +116,9 @@ async def extract_intake_answer(
     try:
         openai_client = client or AsyncOpenAI(api_key=settings.openai_api_key)
         response = await openai_client.chat.completions.create(
-            model="gpt-4o",
-            temperature=0,
-            max_tokens=15,
+            model=settings.openai_model,
+            reasoning_effort=settings.openai_reasoning_effort,
+            max_completion_tokens=500,  # incluye tokens de razonamiento
             messages=[
                 {
                     "role": "system",
