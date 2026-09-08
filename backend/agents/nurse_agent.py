@@ -244,6 +244,7 @@ class NurseAgent:
             patient_text = await self.voice(
                 "alerta_de_riesgo_al_paciente",
                 {
+                    "idioma": state.get("language") or "es",
                     "risk_level": normalize_risk_level(state.get("risk_level")),
                     "alerta_enviada_al_equipo": True,
                     "signos_vitales": state.get("vital_signs", {}),
@@ -303,6 +304,7 @@ class NurseAgent:
             response = await self.voice(
                 "respuesta_a_reporte_de_signos",
                 {
+                    "idioma": state.get("language") or "es",
                     "risk_level": risk_level,
                     "risk_probability": probability,
                     "alerta_enviada_al_equipo": bool(state.get("alert_sent")),

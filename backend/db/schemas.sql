@@ -60,6 +60,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   document_id TEXT,
   phone TEXT,
   telegram_chat_id BIGINT UNIQUE,
+  language TEXT NOT NULL DEFAULT 'es' CHECK (language IN ('es', 'en')),
   ips_id UUID REFERENCES ips(id),
   assigned_doctor_id UUID REFERENCES profiles(id),
   created_at TIMESTAMPTZ DEFAULT NOW(),

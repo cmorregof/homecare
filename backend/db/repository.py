@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import logging
 import secrets
 from typing import Any
 from uuid import uuid4
 
 from db.supabase_client import get_supabase_admin_client
+
+logger = logging.getLogger(__name__)
 
 
 class HomecareRepository:
@@ -91,6 +94,26 @@ class HomecareRepository:
             return dict(update_result.data[0])
         profile["telegram_chat_id"] = telegram_chat_id
         return profile
+
+    async def update_profile_language(self, profile_id: str, language: str) -> bool:
+        """Guarda el idioma en que Carmen habla al paciente (es|en).
+
+        Tolerante a fallos: si la columna aún no existe en producción (migración
+        20260908 pendiente) devuelve False y el bot conserva el idioma en memoria."""
+        client = self.client
+        if client is None:
+            return False
+        try:
+            result = (
+                client.table("profiles")
+                .update({"language": language})
+                .eq("id", profile_id)
+                .execute()
+            )
+        except Exception as exc:  # noqa: BLE001 - el cliente Supabase lanza tipos variados
+            logger.warning("No se pudo guardar el idioma del paciente %s (%s)", profile_id, exc)
+            return False
+        return bool(result.data)
 
     async def get_profile(self, profile_id: str) -> dict[str, Any] | None:
         return await self._get_profile(profile_id)
@@ -236,7 +259,7 @@ class HomecareRepository:
             return []
         result = (
             client.table("profiles")
-            .select("id, full_name, telegram_chat_id, role")
+            .select("*")
             .eq("role", "patient")
             .limit(1000)
             .execute()

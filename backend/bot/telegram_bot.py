@@ -7,6 +7,7 @@ from telegram import Update
 from telegram.ext import Application
 
 from bot.handlers import BotDependencies, register_handlers
+from bot.i18n import t
 from config import settings
 from db.repository import HomecareRepository
 
@@ -93,9 +94,10 @@ async def send_monitoring_reminders(
             continue
         await application.bot.send_message(
             chat_id=int(chat_id),
-            text=(
-                f"Hola {patient.get('full_name') or ''}. Es hora de registrar tus signos vitales.\n"
-                "Usa /vitales para iniciar el reporte guiado."
+            text=t(
+                patient.get("language") or "es",
+                "reminder",
+                name=patient.get("full_name") or "",
             ),
         )
         sent += 1
