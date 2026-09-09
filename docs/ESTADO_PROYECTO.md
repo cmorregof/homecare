@@ -10,8 +10,8 @@ números, y qué sigue. Escrito como fuente de verdad tras el ciclo intensivo de
 
 **CARMEN** (HomecareCCV, proyecto Minciencias 56031, Universidad Nacional de Colombia —
 Manizales) es un sistema multiagente de monitoreo domiciliario y triage para pacientes
-cardio-cerebrovasculares en contextos de bajos recursos (foco territorial: Atlántico,
-Colombia). El paciente reporta signos vitales cada 6 horas por Telegram — sin app, con
+cardio-cerebrovasculares en contextos de bajos recursos (foco territorial: Caldas,
+Colombia; el proyecto cubre también Atlántico). El paciente reporta signos vitales cada 6 horas por Telegram — sin app, con
 un kit de ~COP 165.000 (~US$50) — y el sistema estratifica riesgo, pronostica deterioro,
 genera reporte clínico y alerta al médico asignado. **El clínico humano siempre decide.**
 
@@ -56,6 +56,7 @@ check_alert → send_alerts → build_response (voz LLM)`.
 | Alertas | high/critical → Telegram (paciente: humanizada; médico: clínica) + Resend email; registradas en `alerts` | ✅ verificado con teléfonos reales |
 | Base RAG | 16 extractos literales (pdftotext, sin LLM) con procedencia SHA256: MINSALUD GPC HTA 2013/2017/**2025**, ACV 2015 (+NIHSS), dislipidemias 2014 (Framingham Colombia ×0.75), lineamientos ECV 2026, NEWS2 (RCP), MEWS (CC BY) | ✅ commiteado |
 | Chat web del dashboard | Mismo pipeline que Telegram vía `POST /agents/chat` | ✅ |
+| Canal WhatsApp | Meta Cloud API: webhook `/whatsapp/webhook`, mismo intake de 11 campos y mismo pipeline (`source=whatsapp`), botones de respuesta; sesiones en memoria; sin plantillas ni recordatorios fuera de la ventana de 24 h | 🧪 rama `feat/whatsapp-channel`, no desplegado |
 | CI | GitHub Actions corre la suite completa en cada push/PR (torch CPU incluido) | ✅ verde |
 | Tests | **85** (78 backend + 7 forecast en proceso aparte por conflicto libomp en macOS) | ✅ |
 
@@ -160,7 +161,7 @@ todo en 72 horas. La distinción demo/sistema es esta.
 
 ## 6. Próximos pasos priorizados
 
-1. **Validación prospectiva silenciosa del Forecast en el piloto de Atlántico** — cada
+1. **Validación prospectiva silenciosa del Forecast en el piloto de Caldas** — cada
    reporte de 6h con su outcome genera el dataset domiciliario etiquetado que hoy no
    existe públicamente. El piloto ES el instrumento de datos.
 2. Evaluación de seguridad de las 100 viñetas (el sistema ya está listo para correrla).
@@ -169,6 +170,10 @@ todo en 72 horas. La distinción demo/sistema es esta.
 5. Calibración/reemplazo del tier model; decidir presentación de probabilidades al
    paciente.
 6. Rate-limiting del registro; auditoría RLS; licencia.
+7. **Canal WhatsApp (en curso, 2026-09-09)**: segundo canal sobre el mismo cerebro, en la
+   rama `feat/whatsapp-channel`, sin desplegar y sin migración aplicada. Motor de intake
+   independiente del canal (`backend/channels/intake.py`) y adaptador Meta Cloud API
+   (`backend/channels/whatsapp/`). Telegram no se toca. Runbook: `docs/canal_whatsapp.md`.
 
 ## 7. Ángulos de paper y venues candidatos
 

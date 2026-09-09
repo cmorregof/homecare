@@ -95,6 +95,66 @@ class HomecareRepository:
         profile["telegram_chat_id"] = telegram_chat_id
         return profile
 
+    async def find_profile_by_whatsapp_phone(self, whatsapp_phone: str) -> dict[str, Any] | None:
+        """Perfil vinculado a un número de WhatsApp (wa_id de Meta: E.164 sin '+').
+
+        Tolerante a la migración 20260909 pendiente: si la columna no existe, deja
+        WARNING y devuelve None; el canal conserva el vínculo en memoria."""
+        client = self.client
+        if client is None or not whatsapp_phone:
+            return None
+        try:
+            result = (
+                client.table("profiles")
+                .select("*")
+                .eq("whatsapp_phone", whatsapp_phone)
+                .limit(1)
+                .execute()
+            )
+        except Exception as exc:  # noqa: BLE001 - el cliente Supabase lanza tipos variados
+            logger.warning(
+                "No se pudo buscar el perfil por WhatsApp %s (¿migración 20260909 pendiente?): %s",
+                whatsapp_phone,
+                exc,
+            )
+            return None
+        if not result.data:
+            return None
+        return dict(result.data[0])
+
+    async def link_whatsapp_account(self, document_id: str, whatsapp_phone: str) -> dict[str, Any] | None:
+        client = self.client
+        if client is None:
+            return None
+        result = (
+            client.table("profiles")
+            .select("*")
+            .eq("document_id", document_id.strip())
+            .limit(1)
+            .execute()
+        )
+        if not result.data:
+            return None
+        profile = dict(result.data[0])
+        try:
+            update_result = (
+                client.table("profiles")
+                .update({"whatsapp_phone": whatsapp_phone})
+                .eq("id", profile["id"])
+                .execute()
+            )
+        except Exception as exc:  # noqa: BLE001 - migración 20260909 pendiente: vínculo en memoria
+            logger.warning(
+                "No se pudo guardar el WhatsApp del perfil %s (¿migración 20260909 pendiente?): %s",
+                profile["id"],
+                exc,
+            )
+            update_result = None
+        if update_result is not None and update_result.data:
+            return dict(update_result.data[0])
+        profile["whatsapp_phone"] = whatsapp_phone
+        return profile
+
     async def update_profile_language(self, profile_id: str, language: str) -> bool:
         """Guarda el idioma en que Carmen habla al paciente (es|en).
 
@@ -149,8 +209,9 @@ class HomecareRepository:
         *,
         full_name: str,
         document_id: str,
-        telegram_chat_id: int,
+        telegram_chat_id: int | None = None,
         assigned_doctor_id: str | None = None,
+        whatsapp_phone: str | None = None,
     ) -> dict[str, Any] | None:
         client = self.client
         if client is None:
@@ -175,10 +236,28 @@ class HomecareRepository:
                 "full_name": full_name,
                 "document_id": document_id,
                 "telegram_chat_id": telegram_chat_id,
+                "whatsapp_phone": whatsapp_phone,
                 "assigned_doctor_id": assigned_doctor_id,
             }
         )
-        result = client.table("profiles").insert(payload).execute()
+        try:
+            result = client.table("profiles").insert(payload).execute()
+        except Exception as exc:  # noqa: BLE001 - el cliente Supabase lanza tipos variados
+            if "whatsapp_phone" not in payload:
+                raise
+            # Migración 20260909 pendiente: la cuenta se crea igual y el canal conserva el
+            # vínculo en memoria (WARNING). El usuario de Auth ya existe; no se duplica.
+            logger.warning(
+                "No se pudo guardar whatsapp_phone al crear el perfil %s (%s); reintento sin la columna.",
+                user_id,
+                exc,
+            )
+            fallback = {key: value for key, value in payload.items() if key != "whatsapp_phone"}
+            result = client.table("profiles").insert(fallback).execute()
+            rows = result.data or []
+            created = dict(rows[0]) if rows else dict(fallback)
+            created["whatsapp_phone"] = whatsapp_phone
+            return created
         rows = result.data or []
         return rows[0] if rows else payload
 

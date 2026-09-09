@@ -4,6 +4,7 @@ from typing import Any, TypedDict
 class HomecareAgentState(TypedDict, total=False):
     patient_id: str
     language: str
+    source: str  # telegram | whatsapp | web | manual (procedencia del reporte)
     raw_message: str
     vital_signs: dict[str, Any]
     vital_sign_id: str
