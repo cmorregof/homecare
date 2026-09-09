@@ -70,20 +70,34 @@ class HomecareRepository:
             return None
         return dict(result.data[0])
 
-    async def link_telegram_account(self, document_id: str, telegram_chat_id: int) -> dict[str, Any] | None:
-        client = self.client
-        if client is None:
+    def _find_profile_by_document(self, client: Any, document_id: str) -> dict[str, Any] | None:
+        """Perfil por documento en cualquiera de sus formas equivalentes; el literal manda."""
+        variants = document_id_variants(document_id)
+        if not variants:
             return None
         result = (
             client.table("profiles")
             .select("*")
-            .eq("document_id", document_id.strip())
-            .limit(1)
+            .in_("document_id", variants)
+            .limit(len(variants))
             .execute()
         )
-        if not result.data:
+        rows = [dict(row) for row in (result.data or [])]
+        if not rows:
             return None
-        profile = dict(result.data[0])
+        for variant in variants:
+            for row in rows:
+                if row.get("document_id") == variant:
+                    return row
+        return rows[0]
+
+    async def link_telegram_account(self, document_id: str, telegram_chat_id: int) -> dict[str, Any] | None:
+        client = self.client
+        if client is None:
+            return None
+        profile = self._find_profile_by_document(client, document_id)
+        if not profile:
+            return None
         update_result = (
             client.table("profiles")
             .update({"telegram_chat_id": telegram_chat_id})
@@ -126,16 +140,9 @@ class HomecareRepository:
         client = self.client
         if client is None:
             return None
-        result = (
-            client.table("profiles")
-            .select("*")
-            .eq("document_id", document_id.strip())
-            .limit(1)
-            .execute()
-        )
-        if not result.data:
+        profile = self._find_profile_by_document(client, document_id)
+        if not profile:
             return None
-        profile = dict(result.data[0])
         try:
             update_result = (
                 client.table("profiles")
@@ -216,15 +223,28 @@ class HomecareRepository:
         client = self.client
         if client is None:
             return None
+        document_id = normalize_document_id(document_id) or document_id
         email = f"paciente.{_document_slug(document_id)}@homecareccv.demo"
-        created = client.auth.admin.create_user(
-            {
-                "email": email,
-                "password": secrets.token_urlsafe(24),
-                "email_confirm": True,
-                "user_metadata": {"full_name": full_name, "document_id": document_id},
-            }
-        )
+        try:
+            created = client.auth.admin.create_user(
+                {
+                    "email": email,
+                    "password": secrets.token_urlsafe(24),
+                    "email_confirm": True,
+                    "user_metadata": {"full_name": full_name, "document_id": document_id},
+                }
+            )
+        except Exception as exc:  # noqa: BLE001 - gotrue lanza AuthApiError; el mensaje es lo útil
+            # Caso típico: el documento ya tenía cuenta pero se escribió en otro formato
+            # (con puntos) y la búsqueda no la encontró. Vinculamos la existente en vez
+            # de dejar al paciente sin respuesta.
+            logger.warning("No se pudo crear el usuario de Auth para el documento %s: %s", document_id, exc)
+            existing = self._find_profile_by_document(client, document_id)
+            if not existing:
+                return None
+            return self._link_existing_profile(
+                client, existing, telegram_chat_id=telegram_chat_id, whatsapp_phone=whatsapp_phone
+            )
         user = getattr(created, "user", None) or created
         user_id = getattr(user, "id", None)
         if user_id is None:
@@ -260,6 +280,26 @@ class HomecareRepository:
             return created
         rows = result.data or []
         return rows[0] if rows else payload
+
+    def _link_existing_profile(
+        self,
+        client: Any,
+        profile: dict[str, Any],
+        *,
+        telegram_chat_id: int | None,
+        whatsapp_phone: str | None,
+    ) -> dict[str, Any]:
+        """Guarda el id de canal en un perfil existente; si la columna falta, queda en memoria."""
+        changes = _filter_none({"telegram_chat_id": telegram_chat_id, "whatsapp_phone": whatsapp_phone})
+        if not changes:
+            return profile
+        try:
+            result = client.table("profiles").update(changes).eq("id", profile["id"]).execute()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("No se pudo vincular el canal al perfil %s: %s", profile.get("id"), exc)
+            return {**profile, **changes}
+        rows = result.data or []
+        return dict(rows[0]) if rows else {**profile, **changes}
 
     async def get_latest_risk_prediction(self, patient_id: str) -> dict[str, Any] | None:
         client = self.client
@@ -396,6 +436,45 @@ class HomecareRepository:
 
 def _filter_none(payload: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in payload.items() if value is not None}
+
+
+def normalize_document_id(document_id: str) -> str:
+    """Forma compacta con la que se guarda un documento: solo dígitos, o 'cc' + dígitos.
+
+    '1.002.652.750' → '1002652750'; 'CC 1.002.652.750' → 'cc1002652750'."""
+    compact = "".join(ch for ch in str(document_id or "").strip().lower() if ch.isalnum())
+    if compact.startswith("cc") and compact[2:].isdigit():
+        return f"cc{compact[2:]}"
+    return compact
+
+
+def document_id_variants(document_id: str) -> list[str]:
+    """Formas equivalentes de un documento tal como puede estar guardado en `profiles`:
+    literal, solo dígitos, 'cc'+dígitos y con puntos de miles (1.002.652.750).
+
+    Los pacientes escriben el documento con puntos y las IPS lo guardan sin ellos; una
+    búsqueda literal no encontraba la cuenta y ofrecía registrar un duplicado."""
+    raw = str(document_id or "").strip()
+    normalized = normalize_document_id(raw)
+    digits = normalized[2:] if normalized.startswith("cc") else normalized
+    variants = [raw, normalized]
+    if digits:
+        dotted = _dotted_thousands(digits) if digits.isdigit() else digits
+        variants += [digits, f"cc{digits}", dotted, f"cc{dotted}"]
+    unique: list[str] = []
+    for variant in variants:
+        if variant and variant not in unique:
+            unique.append(variant)
+    return unique
+
+
+def _dotted_thousands(digits: str) -> str:
+    groups: list[str] = []
+    while len(digits) > 3:
+        groups.insert(0, digits[-3:])
+        digits = digits[:-3]
+    groups.insert(0, digits)
+    return ".".join(groups)
 
 
 def _document_slug(document_id: str) -> str:
