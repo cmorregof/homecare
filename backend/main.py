@@ -7,6 +7,7 @@ from api.routes.agents import router as agents_router
 from api.routes.ml import router as ml_router
 from api.routes.models import router as models_router
 from api.routes.telegram import router as telegram_router
+from api.routes.whatsapp import router as whatsapp_router
 from config import settings
 from ml.predict import validate_model_bundle
 
@@ -36,6 +37,7 @@ app.include_router(agents_router)
 app.include_router(ml_router)
 app.include_router(models_router)
 app.include_router(telegram_router)
+app.include_router(whatsapp_router)
 
 
 @app.get("/")

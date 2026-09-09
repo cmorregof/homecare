@@ -35,6 +35,14 @@ class Settings:
     telegram_bot_token: str | None = os.getenv("TELEGRAM_BOT_TOKEN")
     telegram_webhook_url: str | None = os.getenv("TELEGRAM_WEBHOOK_URL")
 
+    # Canal WhatsApp (Meta Cloud API). Opcional: sin token y phone_number_id las rutas
+    # /whatsapp/* responden 503 y el resto del servicio (Telegram incluido) no cambia.
+    whatsapp_access_token: str | None = os.getenv("WHATSAPP_ACCESS_TOKEN")
+    whatsapp_phone_number_id: str | None = os.getenv("WHATSAPP_PHONE_NUMBER_ID")
+    whatsapp_verify_token: str | None = os.getenv("WHATSAPP_VERIFY_TOKEN")
+    whatsapp_app_secret: str | None = os.getenv("WHATSAPP_APP_SECRET")
+    whatsapp_api_version: str = os.getenv("WHATSAPP_API_VERSION") or "v25.0"
+
     resend_api_key: str | None = os.getenv("RESEND_API_KEY")
     from_email: str = os.getenv("FROM_EMAIL", "alertas@homecareccv.co")
 
