@@ -39,7 +39,18 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      - uses: android-actions/setup-android@v3
+      # No setup-android step: the ubuntu-latest image already ships the SDK at
+      # $ANDROID_HOME, and android-actions/setup-android@v3 fails on it — it
+      # tries to install the obsolete `tools` package, which Google withdrew, so
+      # sdkmanager exits 1 before the build starts. This step proves the SDK is
+      # there and makes a future failure legible instead of mysterious.
+      - name: Check the Android SDK the runner provides
+        run: |
+          set -euo pipefail
+          echo "ANDROID_HOME=${ANDROID_HOME:-unset}"
+          test -d "${ANDROID_HOME:?the runner image should define ANDROID_HOME}"
+          echo "Platforms:"; ls "$ANDROID_HOME/platforms"
+          echo "Build tools:"; ls "$ANDROID_HOME/build-tools"
 
       - name: Install Capacitor
         working-directory: mobile
