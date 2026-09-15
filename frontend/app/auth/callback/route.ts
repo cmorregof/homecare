@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { BRAND_NAME } from "@/lib/brand";
+import { storableDocumentId } from "@/lib/document-id";
 import { ROLE_HOME, toPublicRole } from "@/lib/roles";
 import type { UserRole } from "@/types";
 
@@ -36,7 +37,9 @@ export async function GET(request: NextRequest) {
 
   const metadata = user.user_metadata ?? {};
   const fullName = String(metadata.full_name || user.email || `Usuario ${BRAND_NAME}`);
-  const documentId = metadata.document_id ? String(metadata.document_id) : null;
+  // Normalised here too: metadata written before this change, or by any other
+  // client, still reaches the profile through this route.
+  const documentId = storableDocumentId(metadata.document_id as string | null | undefined);
 
   // Does the profile already exist? Two different writes follow from the answer,
   // and conflating them is what made this route dangerous.

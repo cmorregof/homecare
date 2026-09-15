@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 
 import { sendCredentialsEmail } from "@/lib/credentials-email";
+import { storableDocumentId } from "@/lib/document-id";
 import { isPublicRole } from "@/lib/roles";
 import { getSiteUrl } from "@/lib/site-url";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
@@ -141,7 +142,10 @@ function normalize(body: unknown) {
   return {
     email: String(raw.email ?? "").trim().toLowerCase(),
     fullName: String(raw.fullName ?? "").trim(),
-    documentId: raw.documentId ? String(raw.documentId).trim() : null,
+    // Stored compact, matching backend/db/repository.py:226. A document written
+    // "1.002.652.750" here and looked up as "1002652750" by the bot is the
+    // mismatch that left patients unanswered in production.
+    documentId: storableDocumentId(raw.documentId as string | null | undefined),
     role: String(raw.role ?? "patient") as UserRole,
   };
 }

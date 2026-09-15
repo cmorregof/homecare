@@ -10,6 +10,7 @@ import { AuthShell } from "@/components/ui/auth-shell";
 import { Button } from "@/components/ui/button";
 import { Field, FieldRow, SelectField } from "@/components/ui/field";
 import { BRAND_NAME } from "@/lib/brand";
+import { storableDocumentId } from "@/lib/document-id";
 import { ROLE_HOME, toPublicRole, type PublicRole } from "@/lib/roles";
 import { getAuthCallbackUrl } from "@/lib/site-url";
 import { createBrowserSupabaseClient, isSupabaseConfigured } from "@/lib/supabase";
@@ -55,7 +56,7 @@ export default function RegisterPage() {
           emailRedirectTo: getAuthCallbackUrl(),
           data: {
             full_name: fullName,
-            document_id: documentId,
+            document_id: storableDocumentId(documentId),
             role: toPublicRole(role),
           },
         },
@@ -68,7 +69,7 @@ export default function RegisterPage() {
         const { error: profileError } = await supabase.from("profiles").upsert({
           id: data.user.id,
           full_name: fullName,
-          document_id: documentId,
+          document_id: storableDocumentId(documentId),
           role: toPublicRole(role),
         });
         if (profileError) {
@@ -105,6 +106,7 @@ export default function RegisterPage() {
             required
             value={documentId}
             onChange={(event) => setDocumentId(event.target.value)}
+            helper="Con o sin puntos; se guarda siempre igual."
           />
           <SelectField
             label="Rol"
