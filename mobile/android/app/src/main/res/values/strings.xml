@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">CARMEN</string>
+    <string name="title_activity_main">CARMEN</string>
+    <string name="package_name">co.homecareccv.carmen</string>
+    <string name="custom_url_scheme">co.homecareccv.carmen</string>
+</resources>
