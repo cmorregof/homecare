@@ -20,6 +20,7 @@ import {
 
 import { DemoBanner } from "@/components/ui/demo-banner";
 import { BRAND_NAME, BRAND_TAGLINE } from "@/lib/brand";
+import { signOutAction } from "@/lib/session-actions";
 import { PageHeader } from "@/components/ui/page-header";
 import { cn } from "@/lib/utils";
 import type { UserRole } from "@/types";
@@ -132,35 +133,57 @@ function SidebarBody({
         })}
       </nav>
 
-      <div className="mt-4 flex items-center gap-3 border-t border-border pt-4">
-        <div
-          className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand text-base font-bold text-white"
-          aria-hidden
-        >
-          {initial}
+      <div className="mt-4 border-t border-border pt-4">
+        <div className="flex items-center gap-3">
+          <div
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand text-base font-bold text-white"
+            aria-hidden
+          >
+            {initial}
+          </div>
+          <div className="min-w-0 flex-1">
+            {userName ? (
+              <p className="truncate text-sm font-semibold text-ink">{userName}</p>
+            ) : null}
+            <p className="text-[11px] uppercase tracking-[0.04em] text-muted">
+              {ROLE_LABEL[role]}
+            </p>
+          </div>
         </div>
-        <div className="min-w-0 flex-1">
-          {userName ? (
-            <p className="truncate text-sm font-semibold text-ink">{userName}</p>
-          ) : null}
-          <p className="text-[11px] uppercase tracking-[0.04em] text-muted">
-            {ROLE_LABEL[role]}
-          </p>
-        </div>
-        <Link
-          href="/login"
-          onClick={onNavigate}
-          title="Cerrar sesión"
-          className={cn(
-            "grid h-9 w-9 shrink-0 place-items-center rounded-md text-muted transition-colors hover:bg-canvas hover:text-ink",
-            FOCUS_RING,
-          )}
-        >
-          <LogOut className="h-[18px] w-[18px]" aria-hidden />
-          <span className="sr-only">Cerrar sesión</span>
-        </Link>
+        <SignOutButton className="mt-3 w-full justify-center" />
       </div>
     </>
+  );
+}
+
+/**
+ * Sign-out control.
+ *
+ * Written out rather than an icon tile because the icon-only version was the
+ * whole problem: a 36px square whose only label was `sr-only`, parked in the
+ * sidebar footer, which on a phone means opening the drawer first. The label is
+ * visible at every width, and the same component sits in the mobile bar so
+ * leaving takes one tap.
+ *
+ * It is a form, not a link. See lib/session-actions.ts for why the link it
+ * replaces never actually ended the session.
+ */
+function SignOutButton({ className }: { className?: string }) {
+  return (
+    <form action={signOutAction}>
+      <button
+        type="submit"
+        className={cn(
+          "flex items-center gap-2 rounded-md px-3 py-2.5 text-base font-medium text-muted transition-colors",
+          "hover:bg-canvas hover:text-danger",
+          FOCUS_RING,
+          className,
+        )}
+      >
+        <LogOut className="h-[18px] w-[18px] shrink-0" aria-hidden />
+        Cerrar sesión
+      </button>
+    </form>
   );
 }
 
@@ -178,9 +201,10 @@ export function AppShell({
   /** Controls rendered on the right of the page header. */
   actions?: React.ReactNode;
   /**
-   * Display name for the user block. Optional and unwired on purpose: the
-   * shell receives no profile today, and wiring one would mean changing how
-   * every route loads data. Pages that already hold a profile can pass it.
+   * Display name for the user block. Every role page passes the profile it
+   * already loaded through `requireRole`, so the block shows the person rather
+   * than the word "PACIENTE". Optional so a page without a profile still
+   * renders; it falls back to the role label alone.
    */
   userName?: string;
   children: React.ReactNode;
@@ -230,6 +254,7 @@ export function AppShell({
         </button>
         <Heart className="h-5 w-5 shrink-0 fill-current text-brand" aria-hidden />
         <span className="truncate text-base font-extrabold text-ink">{BRAND_NAME}</span>
+        <SignOutButton className="ml-auto shrink-0 px-2 py-1.5 text-sm" />
       </div>
 
       {/* Mobile drawer */}

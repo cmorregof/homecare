@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { RiskBadge } from "@/components/risk/risk-badge";
 import { AppShell } from "@/components/ui/app-shell";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Table, TableWrap, Td, Th, Tr } from "@/components/ui/table";
@@ -18,18 +19,23 @@ export default async function PatientHistoryPage({
 }: {
   searchParams?: { page?: string };
 }) {
-  await requireRole("patient");
+  const viewer = await requireRole("patient");
   const page = Math.max(1, Number(searchParams?.page ?? "1"));
   const { rows, total, pageSize } = await getPatientHistory(page);
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
-    <AppShell role="patient" title="Historial de signos vitales">
+    <AppShell
+      role="patient"
+      title="Historial de signos vitales"
+      subtitle="El riesgo de cada fila es el que Carmen calculó para esa medición."
+      userName={viewer.full_name}
+    >
       <TableWrap>
         {rows.length === 0 ? (
           <EmptyState>Todavía no hay mediciones registradas.</EmptyState>
         ) : (
-          <div className="min-w-[760px]">
+          <div className="min-w-[860px]">
             <Table>
               <thead>
                 <tr>
@@ -38,6 +44,7 @@ export default async function PatientHistoryPage({
                   <Th>Pulso</Th>
                   <Th>SpO2</Th>
                   <Th>Glucosa</Th>
+                  <Th>Riesgo</Th>
                   <Th>Síntomas</Th>
                 </tr>
               </thead>
@@ -49,6 +56,20 @@ export default async function PatientHistoryPage({
                     <Td>{row.heart_rate}</Td>
                     <Td>{row.oxygen_saturation ?? "Sin dato"}</Td>
                     <Td>{row.glucose ?? "Sin dato"}</Td>
+                    <Td>
+                      {row.risk_level ? (
+                        <span className="flex flex-col items-start gap-1">
+                          <RiskBadge level={row.risk_level} compact />
+                          {row.risk_probability == null ? null : (
+                            <span className="text-xs text-muted">
+                              {Math.round(row.risk_probability * 100)}%
+                            </span>
+                          )}
+                        </span>
+                      ) : (
+                        <span className="text-sm text-muted">Sin evaluar</span>
+                      )}
+                    </Td>
                     <Td className="text-muted">
                       Dolor {row.pain_score ?? 0}, mareo {row.dizziness_score ?? 0}, disnea {row.dyspnea_score ?? 0}
                     </Td>

@@ -8,7 +8,7 @@ export default async function PatientChatPage() {
   const { vitals, prediction } = await getPatientDashboardData(profile.id);
 
   return (
-    <AppShell role="patient" title="Chat con Carmen">
+    <AppShell role="patient" title="Chat con Carmen" userName={profile.full_name}>
       <ChatShell
         role="patient"
         patientId={profile.id}

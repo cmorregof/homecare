@@ -35,6 +35,30 @@ const BOUNDS = {
   score: { min: 0, max: 10 },
 } as const;
 
+/**
+ * Orientation ranges shown under the less familiar fields.
+ *
+ * These are NOT the thresholds that decide anything. Nothing here is compared
+ * against a reading, no field turns red, and the risk tier still comes only
+ * from the server. They exist because a patient at home has no idea whether 24
+ * breaths a minute is worth reporting, and someone who cannot tell is more
+ * likely to leave the field blank or invent a number.
+ *
+ * Blood pressure and pulse are deliberately absent: they are the two figures
+ * patients already know, and a "normal" printed beside them invites
+ * self-diagnosis on precisely the values the model weighs most.
+ *
+ * They are general adult reference values, not this patient's targets — a
+ * person with COPD lives below 95% saturation by definition. The caption says
+ * so, and says who actually decides.
+ */
+const REFERENCE = {
+  oxygen_saturation: "Referencia general en adultos: 95-100 %.",
+  respiratory_rate: "Conteo guiado de 30 s multiplicado por 2 (Protocolo v1.0). Referencia general: 12-20 rpm.",
+  temperature: "Referencia general: 36,0-37,5 °C.",
+  glucose: "Referencia general en ayunas: 70-100 mg/dL.",
+} as const;
+
 /** The server requires these three (nurse_agent.py:378-385). */
 const REQUIRED = ["systolic_bp", "diastolic_bp", "heart_rate"] as const;
 
@@ -203,6 +227,11 @@ export function VitalReportForm({ patientId }: { patientId: string }) {
 
       <Card>
         <CardTitle>Signos vitales</CardTitle>
+        <p className="mb-3 text-base text-muted">
+          Los rangos que aparecen debajo de algunos campos son de referencia general y sirven
+          solo para orientarte al anotar. No indican tu estado: quien evalúa el riesgo es Carmen
+          con tu historia clínica. Registra el valor que midas, aunque quede fuera del rango.
+        </p>
         <FieldRow>
           <Field
             label="Presión sistólica (mmHg)"
@@ -244,7 +273,7 @@ export function VitalReportForm({ patientId }: { patientId: string }) {
             max={BOUNDS.respiratory_rate.max}
             value={form.respiratory_rate}
             onChange={(event) => set("respiratory_rate", event.target.value)}
-            helper="Conteo guiado de 30 s multiplicado por 2 (Protocolo v1.0)."
+            helper={REFERENCE.respiratory_rate}
           />
         </FieldRow>
         <FieldRow>
@@ -256,6 +285,7 @@ export function VitalReportForm({ patientId }: { patientId: string }) {
             max={BOUNDS.oxygen_saturation.max}
             value={form.oxygen_saturation}
             onChange={(event) => set("oxygen_saturation", event.target.value)}
+            helper={REFERENCE.oxygen_saturation}
           />
           <Field
             label="Temperatura (°C)"
@@ -266,6 +296,7 @@ export function VitalReportForm({ patientId }: { patientId: string }) {
             max={BOUNDS.temperature.max}
             value={form.temperature}
             onChange={(event) => set("temperature", event.target.value)}
+            helper={REFERENCE.temperature}
           />
         </FieldRow>
         <FieldRow>
@@ -277,6 +308,7 @@ export function VitalReportForm({ patientId }: { patientId: string }) {
             max={BOUNDS.glucose.max}
             value={form.glucose}
             onChange={(event) => set("glucose", event.target.value)}
+            helper={REFERENCE.glucose}
           />
           <Field
             label="Peso (kg)"
