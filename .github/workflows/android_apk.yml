@@ -68,18 +68,24 @@ jobs:
         working-directory: mobile/android
         run: ./gradlew assembleDebug --no-daemon --stacktrace
 
-      # On a pull_request event the checkout is a merge commit that exists on
-      # no branch, so `git rev-parse HEAD` names a build nobody can look up.
-      # The PR's head sha is the one a person can actually find.
-      - name: Name the artifact after the commit it was built from
-        id: name
-        run: |
-          sha="${{ github.event.pull_request.head.sha || github.sha }}"
-          echo "sha=${sha:0:7}" >> "$GITHUB_OUTPUT"
+      # Gradle names its output app-debug.apk. That is the file a person ends up
+      # with on their phone, so it gets the product's name instead.
+      - name: Name the APK CARMEN.apk
+        run: mv app-debug.apk CARMEN.apk
+        working-directory: mobile/android/app/build/outputs/apk/debug
 
       - uses: actions/upload-artifact@v4
         with:
-          name: carmen-${{ steps.name.outputs.sha }}-debug-apk
-          path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          name: CARMEN
+          path: mobile/android/app/build/outputs/apk/debug/CARMEN.apk
           if-no-files-found: error
           retention-days: 90
+
+      # The commit stays recorded, just not in the filename: on a pull_request
+      # event the checkout is a merge commit that exists on no branch, so the
+      # head sha is the one someone can actually look up when asking which code
+      # a handed-out APK came from.
+      - name: Record which commit this build came from
+        run: |
+          sha="${{ github.event.pull_request.head.sha || github.sha }}"
+          echo "**CARMEN.apk** compilada desde \`${sha:0:7}\`" >> "$GITHUB_STEP_SUMMARY"

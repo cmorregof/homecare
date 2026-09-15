@@ -10,8 +10,8 @@ No hace falta instalar nada. La compila GitHub Actions:
 
 1. Pestaña **Actions** del repositorio → workflow **Android APK**
 2. **Run workflow** sobre `main` (o abre la última ejecución, si ya hay una)
-3. Cuando termine, en **Artifacts** hay un `.zip`
-4. Descomprímelo: dentro está `app-debug.apk`
+3. Cuando termine, en **Artifacts** hay un zip llamado **CARMEN**
+4. Descomprímelo: dentro está `CARMEN.apk`
 
 Para instalarla en un teléfono hay que permitir **instalar aplicaciones de
 orígenes desconocidos**, porque no viene de Play Store. Android lo pide solo al
@@ -73,7 +73,8 @@ npx cap sync android
 cd android && ./gradlew assembleDebug
 ```
 
-La APK sale en `android/app/build/outputs/apk/debug/app-debug.apk`.
+La APK sale en `android/app/build/outputs/apk/debug/app-debug.apk`. El
+workflow la renombra a `CARMEN.apk` antes de publicarla; en local no.
 
 ## Detalles que ya están resueltos
 
