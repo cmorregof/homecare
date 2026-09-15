@@ -6,10 +6,24 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 from telegram import Update
-from telegram.ext import CommandHandler, ContextTypes, ConversationHandler, MessageHandler, filters
+from telegram.ext import (
+    CallbackQueryHandler,
+    CommandHandler,
+    ContextTypes,
+    ConversationHandler,
+    MessageHandler,
+    filters,
+)
 
 from agents.nurse_agent import NurseAgent, parse_vital_signs_message
-from bot.keyboards import remove_keyboard, yes_no_keyboard
+from bot.i18n import (
+    CHOOSE_LANGUAGE,
+    LANGUAGE_NOT_UNDERSTOOD,
+    language_from_telegram,
+    parse_language_choice,
+    t,
+)
+from bot.keyboards import language_keyboard, remove_keyboard, yes_no_keyboard
 from bot.validators import (
     is_affirmative,
     is_negative,
@@ -32,6 +46,7 @@ SUPPORTED_COMMANDS = [
     "/historial",
     "/ayuda",
     "/emergencia",
+    "/idioma",
 ]
 
 (
@@ -101,6 +116,10 @@ def register_handlers(application: Any, dependencies: BotDependencies | None = N
     application.add_handler(CommandHandler("estado", status_command))
     application.add_handler(CommandHandler("historial", history_command))
     application.add_handler(CommandHandler("emergencia", emergency_command))
+    application.add_handler(CommandHandler("idioma", language_command))
+    application.add_handler(CommandHandler("language", language_command))
+    # Botones de idioma: callback_query, funcionan incluso en mitad del intake guiado.
+    application.add_handler(CallbackQueryHandler(language_callback, pattern=r"^lang:(es|en)$"))
     application.add_handler(
         ConversationHandler(
             entry_points=[
@@ -135,23 +154,127 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     profile = await _profile_by_chat(deps.repository, chat_id)
     if profile:
         _cache_profile(context, profile)
-        await _reply(
-            update,
-            f"Hola {profile.get('full_name', '')}. Tu cuenta ya está vinculada a HomecareCCV.\n\n"
-            "Cuando quieras registrar signos vitales usa /vitales.",
-        )
+        language = _language(update, context)
+        await _reply(update, t(language, "start_linked", name=profile.get("full_name", "")))
+        return
+    # Paciente nuevo: el idioma del teléfono (language_code) es la propuesta inicial,
+    # pero se confirma en el saludo antes de pedir el documento.
+    context.user_data["language"] = _language(update, context)
+    context.user_data["awaiting_language"] = True
+    context.user_data["awaiting_document"] = False
+    await _reply(update, CHOOSE_LANGUAGE, reply_markup=language_keyboard())
+
+
+async def language_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/idioma [es|en]: cambia el idioma en que Carmen habla a este paciente."""
+    deps = _deps(context)
+    args = getattr(context, "args", None) or []
+    inline = parse_language_choice(" ".join(str(a) for a in args)) if args else None
+    if inline:
+        await _apply_language_choice(update, context, deps, inline)
+        return
+    context.user_data["awaiting_language"] = True
+    await _reply(update, CHOOSE_LANGUAGE, reply_markup=language_keyboard())
+
+
+async def language_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = getattr(update, "callback_query", None)
+    if query is None:
+        return
+    answer = getattr(query, "answer", None)
+    if answer is not None:
+        await answer()
+    language = parse_language_choice(str(query.data or "").split(":", 1)[-1])
+    if language is None:
+        return
+    await _apply_language_choice(update, context, _deps(context), language)
+
+
+async def language_choice_message(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    dependencies: BotDependencies,
+) -> None:
+    """El paciente respondió al selector de idioma escribiendo en vez de tocar un botón."""
+    text = _message_text(update)
+    language = parse_language_choice(text)
+    if language is None:
+        if looks_like_document_id(text) or extract_document_id(text):
+            # Saltó la pregunta y mandó su documento: seguimos con el idioma detectado.
+            context.user_data.pop("awaiting_language", None)
+            context.user_data["awaiting_document"] = True
+            await link_document_message(update, context, dependencies)
+            return
+        await _reply(update, LANGUAGE_NOT_UNDERSTOOD, reply_markup=language_keyboard())
+        return
+    await _apply_language_choice(update, context, dependencies, language)
+
+
+async def _apply_language_choice(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    dependencies: BotDependencies,
+    language: str,
+) -> None:
+    context.user_data.pop("awaiting_language", None)
+    context.user_data["language"] = language
+    profile = context.user_data.get("profile") or await _profile_by_chat(
+        dependencies.repository, _chat_id(update)
+    )
+    if profile:
+        _cache_profile(context, profile)
+        await _persist_language(dependencies, context, profile, language)
+        await _reply(update, t(language, "language_set"))
+        return
+    if context.user_data.get("awaiting_registration_name"):
+        await _reply(update, t(language, "language_set"))
         return
     context.user_data["awaiting_document"] = True
-    await _reply(
-        update,
-        "Hola, soy Carmen, la enfermera virtual de HomecareCCV.\n\n"
-        "Para empezar, escríbeme tu número de documento de identidad. "
-        "Si ya tienes cuenta la vinculo, y si no, te registro en un momento.",
-    )
+    await _reply(update, t(language, "language_set") + "\n\n" + t(language, "ask_document"))
+
+
+async def _persist_language(
+    dependencies: BotDependencies,
+    context: ContextTypes.DEFAULT_TYPE,
+    profile: dict[str, Any],
+    language: str,
+) -> None:
+    """Guarda el idioma en el perfil; si falla (migración pendiente) queda en memoria."""
+    context.user_data["language"] = language
+    profile["language"] = language
+    repository = dependencies.repository
+    if profile.get("id") and hasattr(repository, "update_profile_language"):
+        await repository.update_profile_language(str(profile["id"]), language)
+
+
+def _language(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
+    """Idioma de Carmen para este paciente: elección explícita > perfil guardado > teléfono."""
+    user_data = getattr(context, "user_data", None) or {}
+    chosen = user_data.get("language")
+    if chosen:
+        return language_from_telegram(chosen)
+    profile = user_data.get("profile") or {}
+    if profile.get("language"):
+        return language_from_telegram(profile["language"])
+    user = getattr(update, "effective_user", None)
+    return language_from_telegram(getattr(user, "language_code", None))
+
+
+async def _voiced_in_language(
+    dependencies: BotDependencies,
+    language: str,
+    kind: str,
+    draft: str,
+    payload: dict[str, Any] | None = None,
+) -> str:
+    """Texto determinista en español: se traduce con la voz solo si el paciente eligió otro idioma."""
+    if language == "es" or dependencies.voice is None:
+        return draft
+    return await dependencies.voice(kind, {"idioma": language, **(payload or {})}, draft)
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int | None:
-    await _reply(update, help_message())
+    await _reply(update, help_message(_language(update, context)))
     return ConversationHandler.END
 
 
@@ -160,8 +283,10 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     profile = await ensure_linked_patient(update, context, deps)
     if not profile:
         return
+    language = _language(update, context)
     prediction = await deps.repository.get_latest_risk_prediction(str(profile["id"]))
-    await _reply(update, format_latest_status_message(prediction))
+    draft = format_latest_status_message(prediction, language)
+    await _reply(update, await _voiced_in_language(deps, language, "consulta_de_estado", draft))
 
 
 async def history_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -169,8 +294,10 @@ async def history_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     profile = await ensure_linked_patient(update, context, deps)
     if not profile:
         return
+    language = _language(update, context)
     rows = await deps.repository.get_recent_vital_signs(str(profile["id"]), limit=5)
-    await _reply(update, format_vital_history_message(rows))
+    draft = format_vital_history_message(rows, language)
+    await _reply(update, await _voiced_in_language(deps, language, "consulta_de_historial", draft))
 
 
 async def emergency_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -209,12 +336,7 @@ async def emergency_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             "telegram_sent": telegram_sent,
         }
     )
-    await _reply(
-        update,
-        "Activé una alerta inmediata para tu equipo de salud.\n\n"
-        "Si tienes dolor fuerte en el pecho, dificultad marcada para respirar, debilidad en un lado "
-        "del cuerpo, confusión, desmayo o presión muy alta, llama al 123 o ve a urgencias.",
-    )
+    await _reply(update, t(_language(update, context), "emergency_reply"))
 
 
 async def _speak(
@@ -232,6 +354,7 @@ async def _speak(
         text = await deps.voice(
             "pregunta_de_intake",
             {
+                "idioma": _language(update, context),
                 "paso": step,
                 "problema_con_respuesta_anterior": issue,
                 "instruccion": (
@@ -279,7 +402,7 @@ async def start_vitals_conversation(update: Update, context: ContextTypes.DEFAUL
         f"Hola {_first_name(profile)}. Vamos a registrar tus signos vitales.\n"
         "¿Tienes tu tensiómetro a la mano?",
         step="saludo_y_tensiometro",
-        reply_markup=yes_no_keyboard(),
+        reply_markup=yes_no_keyboard(_language(update, context)),
     )
     return CONFIRM_TENSIOMETER
 
@@ -325,7 +448,7 @@ async def confirm_tensiometer_step(update: Update, context: ContextTypes.DEFAULT
             "Respóndeme Sí o No, por favor.",
             step="tensiometro_reintento",
             issue=f"El paciente respondió: {answer}",
-            reply_markup=yes_no_keyboard(),
+            reply_markup=yes_no_keyboard(_language(update, context)),
         )
         return CONFIRM_TENSIOMETER
     await _speak(
@@ -359,18 +482,20 @@ async def respiratory_rate_step(update: Update, context: ContextTypes.DEFAULT_TY
             issue=f"El paciente respondió: {raw}",
         )
         return RESPIRATORY_RATE
-    next_question = "Ahora ponte el oxímetro en el dedo, espera a que la cifra se estabilice y dime tu pulso. Ejemplo: 75"
+    language = _language(update, context)
+    next_question = t(language, "question_pulse")
     if count_30s is not None:
         per_minute = int(count_30s * 2)
         _draft(context)["respiratory_rate"] = per_minute
         if per_minute < 8 or per_minute > 28:
             await _reply(
                 update,
-                f"Mijo, eso equivale a {per_minute} respiraciones por minuto y es más de lo "
-                "que me gusta ver. Si además sientes ahogo marcado, dolor en el pecho o mucho "
-                "decaimiento, no esperes: ve a urgencias o marca el 123 ya mismo. "
-                "Si te sientes bien, seguimos con calma.\n\n"
-                f"{next_question}",
+                t(
+                    language,
+                    "respiratory_high_warning",
+                    per_minute=per_minute,
+                    next_question=next_question,
+                ),
             )
             return HEART_RATE
         await _speak(
@@ -513,19 +638,10 @@ async def oxygen_step(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         return OXYGEN
     if value is not None:
         _draft(context)["oxygen_saturation"] = value
-    next_question = (
-        "Ahora la presión arterial: brazo apoyado en la mesa a la altura del corazón, "
-        "sin hablar durante la medición. Escríbela así: 120/80"
-    )
+    language = _language(update, context)
+    next_question = t(language, "question_pressure")
     if value is not None and float(value) < 88:
-        await _reply(
-            update,
-            "Gracias por decírmelo, mijo. Esa saturación me preocupa de verdad. "
-            "Revisa primero que el oxímetro haya marcado bien; y si marcó bien, o sientes "
-            "ahogo, labios morados, dolor en el pecho, confusión o mucho decaimiento, "
-            "no esperes nada: urgencias o el 123 ahora mismo.\n\n"
-            f"{next_question}",
-        )
+        await _reply(update, t(language, "oxygen_low_warning", next_question=next_question))
         return BLOOD_PRESSURE
     await _speak(update, context, next_question, step="presion_arterial")
     return BLOOD_PRESSURE
@@ -627,26 +743,31 @@ async def dyspnea_step(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     if not profile:
         return ConversationHandler.END
     draft = dict(_draft(context))
-    await _reply(update, "¡Listo! Estoy analizando tus datos...")
+    language = _language(update, context)
+    await _reply(update, t(language, "analyzing"))
     state = await process_vital_report(
         patient_id=str(profile["id"]),
         raw_message=build_raw_message_from_draft(draft),
         vital_signs=draft,
         dependencies=deps,
+        language=language,
     )
     context.user_data.pop("vitals_draft", None)
-    await _reply(update, state.get("final_response", "Recibí tus datos, pero no pude construir la respuesta final."))
+    await _reply(update, state.get("final_response", t(language, "final_response_missing")))
     return ConversationHandler.END
 
 
 async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data.pop("vitals_draft", None)
-    await _reply(update, "Registro cancelado. Puedes iniciar de nuevo con /vitales.", reply_markup=remove_keyboard())
+    await _reply(update, t(_language(update, context), "cancelled"), reply_markup=remove_keyboard())
     return ConversationHandler.END
 
 
 async def document_or_free_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     deps = _deps(context)
+    if context.user_data.get("awaiting_language"):
+        await language_choice_message(update, context, deps)
+        return
     if context.user_data.get("awaiting_registration_name"):
         await register_new_patient_message(update, context, deps)
         return
@@ -659,15 +780,17 @@ async def document_or_free_text_message(update: Update, context: ContextTypes.DE
         context.user_data["awaiting_document"] = True
         await link_document_message(update, context, deps)
         return
+    language = _language(update, context)
     if profile and looks_like_vital_report(text):
-        await _reply(update, "Recibí tus signos. Estoy analizándolos...")
+        await _reply(update, t(language, "analyzing_free_text"))
         state = await process_vital_report(
             patient_id=str(profile["id"]),
             raw_message=text,
             vital_signs={},
             dependencies=deps,
+            language=language,
         )
-        await _reply(update, state.get("final_response", "Recibí tus datos."))
+        await _reply(update, state.get("final_response", t(language, "received")))
         return
     latest_prediction = None
     recent_vitals: list[dict[str, Any]] = []
@@ -675,11 +798,12 @@ async def document_or_free_text_message(update: Update, context: ContextTypes.DE
         latest_prediction = await deps.repository.get_latest_risk_prediction(str(profile["id"]))
     if profile and wants_history_context(text):
         recent_vitals = await deps.repository.get_recent_vital_signs(str(profile["id"]), limit=5)
-    draft = build_carmen_free_text_response(text, profile, latest_prediction, recent_vitals)
+    draft = build_carmen_free_text_response(text, profile, latest_prediction, recent_vitals, language)
     if deps.voice is not None and not _mentions_emergency(_normalize_text(text)):
         draft = await deps.voice(
             "conversacion_libre",
             {
+                "idioma": language,
                 "mensaje_del_paciente": text,
                 "paciente": _first_name(profile),
                 "es_emergencia": False,
@@ -695,17 +819,14 @@ async def link_document_message(
     dependencies: BotDependencies,
 ) -> None:
     chat_id = _chat_id(update)
+    language = _language(update, context)
     text = _message_text(update).strip()
     document_id = text
     pending_name: str | None = None
     if not looks_like_document_id(document_id):
         extracted = extract_document_id(text)
         if extracted is None:
-            await _reply(
-                update,
-                "Ese texto no parece un número de documento. Escríbeme solo tu documento, "
-                "por ejemplo: 1234567890 (o si te dieron uno tipo cc123456, tal cual).",
-            )
+            await _reply(update, t(language, "doc_invalid"))
             return
         document_id = extracted
         pending_name = extract_full_name(text)
@@ -717,20 +838,12 @@ async def link_document_message(
         context.user_data["awaiting_document"] = False
         context.user_data["registration_document"] = document_id
         context.user_data["awaiting_registration_name"] = True
-        await _reply(
-            update,
-            "No encontré una cuenta con ese documento, pero puedo crearla ahora mismo.\n\n"
-            "Dime tu nombre completo (nombre y apellido) para registrarte, "
-            "o escribe \"cancelar\" si prefieres no hacerlo.",
-        )
+        await _reply(update, t(language, "doc_unknown_offer_registration"))
         return
     context.user_data["awaiting_document"] = False
     _cache_profile(context, profile)
-    await _reply(
-        update,
-        f"Listo, {profile.get('full_name', '')}. Tu Telegram quedó vinculado.\n\n"
-        "Para registrar signos vitales usa /vitales.",
-    )
+    await _persist_language(dependencies, context, profile, language)
+    await _reply(update, t(language, "linked_ok", name=profile.get("full_name", "")))
 
 
 async def register_new_patient_message(
@@ -739,13 +852,11 @@ async def register_new_patient_message(
     dependencies: BotDependencies,
 ) -> None:
     text = _message_text(update)
-    if _normalize_text(text) in {"cancelar", "no", "no gracias", "no quiero"}:
+    language = _language(update, context)
+    if _normalize_text(text) in {"cancelar", "no", "no gracias", "no quiero", "cancel", "no thanks"}:
         context.user_data.pop("awaiting_registration_name", None)
         context.user_data.pop("registration_document", None)
-        await _reply(
-            update,
-            "Listo, no creé ninguna cuenta. Cuando quieras registrarte, envíame tu documento de nuevo.",
-        )
+        await _reply(update, t(language, "registration_cancelled"))
         return
 
     document_in_text = extract_document_id(text)
@@ -758,20 +869,14 @@ async def register_new_patient_message(
             context.user_data.pop("registration_document", None)
             context.user_data["awaiting_document"] = False
             _cache_profile(context, existing)
-            await _reply(
-                update,
-                f"Listo, {existing.get('full_name', '')}. Ese documento ya tenía cuenta, "
-                "así que quedaste vinculado.\n\nPara registrar signos vitales usa /vitales.",
-            )
+            await _persist_language(dependencies, context, existing, language)
+            await _reply(update, t(language, "already_had_account", name=existing.get("full_name", "")))
             return
         context.user_data["registration_document"] = document_in_text
 
     full_name = extract_full_name(text)
     if full_name is None:
-        await _reply(
-            update,
-            "Para registrarte necesito tu nombre completo, por ejemplo: Ana María Pérez.",
-        )
+        await _reply(update, t(language, "need_full_name"))
         return
 
     document_id = str(context.user_data.get("registration_document") or "")
@@ -785,6 +890,7 @@ async def register_patient_account(
     full_name: str,
     document_id: str,
 ) -> None:
+    language = _language(update, context)
     doctor = await pick_doctor_for_new_patient(dependencies.repository)
     profile = await dependencies.repository.create_patient_account(
         full_name=full_name,
@@ -793,26 +899,18 @@ async def register_patient_account(
         assigned_doctor_id=str(doctor["id"]) if doctor else None,
     )
     if not profile:
-        await _reply(
-            update,
-            "No pude crear tu cuenta en este momento. Intenta de nuevo en unos minutos "
-            "o pide apoyo a tu IPS.",
-        )
+        await _reply(update, t(language, "account_create_failed"))
         return
 
     context.user_data.pop("awaiting_registration_name", None)
     context.user_data.pop("registration_document", None)
     context.user_data["awaiting_document"] = False
     _cache_profile(context, profile)
-    doctor_note = (
-        f"\nTu médico asignado es {doctor.get('full_name')}; recibirá tus alertas de riesgo."
-        if doctor
-        else ""
-    )
+    await _persist_language(dependencies, context, profile, language)
+    doctor_note = t(language, "doctor_note", doctor=doctor.get("full_name")) if doctor else ""
     await _reply(
         update,
-        f"¡Bienvenido/a, {profile.get('full_name', '')}! Tu cuenta quedó creada.{doctor_note}\n\n"
-        "Registra tus primeros signos vitales con /vitales.",
+        t(language, "account_created", name=profile.get("full_name", ""), doctor_note=doctor_note),
     )
     if doctor:
         await notify_doctor_new_patient(doctor, profile)
@@ -852,10 +950,12 @@ async def process_vital_report(
     raw_message: str,
     vital_signs: dict[str, Any],
     dependencies: BotDependencies,
+    language: str = "es",
 ) -> dict[str, Any]:
     return await dependencies.nurse_agent.process_vital_report(
         {
             "patient_id": patient_id,
+            "language": language,
             "raw_message": raw_message,
             "vital_signs": vital_signs,
             "source": "telegram",
@@ -871,30 +971,22 @@ async def ensure_linked_patient(
     profile = await _linked_profile(update, context, dependencies)
     if profile and profile.get("role") == "patient":
         return profile
+    language = _language(update, context)
     if profile:
-        await _reply(update, "Tu cuenta está vinculada, pero este flujo está habilitado para pacientes.")
+        await _reply(update, t(language, "only_patients"))
         return None
     context.user_data["awaiting_document"] = True
-    await _reply(update, "Primero necesito vincular tu cuenta. Envíame tu número de documento de identidad.")
+    await _reply(update, t(language, "need_link_first"))
     return None
 
 
-def help_message() -> str:
-    return (
-        "Comandos HomecareCCV:\n"
-        "/start - vincular tu cuenta de Telegram\n"
-        "/vitales - registrar signos vitales paso a paso\n"
-        "/registro - iniciar el mismo registro guiado\n"
-        "/estado - ver tu último nivel de riesgo\n"
-        "/historial - ver tus últimas 5 mediciones\n"
-        "/emergencia - avisar de inmediato al equipo de salud\n"
-        "/ayuda - ver esta lista"
-    )
+def help_message(language: str = "es") -> str:
+    return t(language, "help")
 
 
-def format_latest_status_message(prediction: dict[str, Any] | None) -> str:
+def format_latest_status_message(prediction: dict[str, Any] | None, language: str = "es") -> str:
     if not prediction:
-        return "Aún no tengo predicciones registradas para tu cuenta. Puedes reportar signos con /vitales."
+        return t(language, "status_none")
     risk_level = normalize_risk_level(prediction.get("risk_level"))
     risk = RISK_LEVELS[risk_level]
     probability = float(prediction.get("risk_probability") or 0)
@@ -908,9 +1000,9 @@ def format_latest_status_message(prediction: dict[str, Any] | None) -> str:
     )
 
 
-def format_vital_history_message(rows: list[dict[str, Any]]) -> str:
+def format_vital_history_message(rows: list[dict[str, Any]], language: str = "es") -> str:
     if not rows:
-        return "Aún no tengo mediciones registradas. Puedes empezar con /vitales."
+        return t(language, "history_none")
     lines = ["Tus últimas mediciones:"]
     for index, row in enumerate(rows, start=1):
         pressure = _format_pressure(row)
@@ -1009,13 +1101,28 @@ def wants_status_context(text: str) -> bool:
             "resultado",
             "ultima prediccion",
             "ultima medicion",
+            "how am i",
+            "how i am doing",
+            "my status",
+            "status",
+            "risk",
+            "my level",
+            "result",
+            "last prediction",
+            "last measurement",
         )
     )
 
 
 def wants_history_context(text: str) -> bool:
     normalized = _normalize_text(text)
-    return any(phrase in normalized for phrase in ("historial", "ultimas", "mediciones", "registros anteriores"))
+    return any(
+        phrase in normalized
+        for phrase in (
+            "historial", "ultimas", "mediciones", "registros anteriores",
+            "history", "last measurements", "previous records", "my records",
+        )
+    )
 
 
 def build_carmen_free_text_response(
@@ -1023,21 +1130,27 @@ def build_carmen_free_text_response(
     profile: dict[str, Any] | None = None,
     latest_prediction: dict[str, Any] | None = None,
     recent_vitals: list[dict[str, Any]] | None = None,
+    language: str = "es",
 ) -> str:
     normalized = _normalize_text(text)
     first_name = _first_name(profile)
-    emergency_lead = f"{first_name}, te leo." if first_name else "Te leo."
 
     if _mentions_emergency(normalized):
-        return (
-            f"{emergency_lead} Si esto está pasando ahora mismo, no esperes mi respuesta: "
-            "llama al 123 o ve a urgencias, especialmente si hay dolor fuerte en el pecho, "
-            "dificultad para respirar, desmayo, confusión, debilidad en un lado del cuerpo "
-            "o problemas para hablar.\n\n"
-            "Si puedes hacerlo sin retrasar la atención, usa /emergencia para avisar también a tu equipo de salud."
+        # Determinista y en el idioma del paciente: la emergencia nunca pasa por el LLM.
+        lead = (
+            t(language, "free_text_emergency_lead", first_name=first_name)
+            if first_name
+            else t(language, "free_text_emergency_lead_anonymous")
         )
+        return t(language, "free_text_emergency", lead=lead)
 
-    if _contains_any(normalized, ("eres carmen", "sos carmen", "quien eres", "quien sos", "como te llamas")):
+    if _contains_any(
+        normalized,
+        (
+            "eres carmen", "sos carmen", "quien eres", "quien sos", "como te llamas",
+            "are you carmen", "who are you", "what's your name", "whats your name", "what is your name",
+        ),
+    ):
         account_note = (
             " Ya tengo tu cuenta vinculada, así que puedo mirar tu historial cuando lo necesites."
             if profile
@@ -1084,13 +1197,16 @@ def build_carmen_free_text_response(
             "Si prefieres que te acompañe paso a paso, empezamos con /vitales."
         )
 
-    if _contains_any(normalized, ("gracias", "muchas gracias", "mil gracias")):
+    if _contains_any(normalized, ("gracias", "muchas gracias", "mil gracias", "thanks", "thank you")):
         return (
             f"Con gusto, {first_name}. Aquí estoy para acompañarte. "
             "Cuando quieras revisar tus signos, tu estado o registrar una nueva medición, me escribes."
         )
 
-    if _contains_any(normalized, ("que puedes hacer", "que haces", "ayudame", "ayuda", "comandos")):
+    if _contains_any(
+        normalized,
+        ("que puedes hacer", "que haces", "ayudame", "ayuda", "comandos", "what can you do", "help", "commands"),
+    ):
         return (
             f"Puedo ayudarte con varias cosas, {first_name}: registrar signos vitales, revisar tu último riesgo, "
             "mostrar mediciones recientes y activar una alerta si te sientes en emergencia.\n\n"
@@ -1135,6 +1251,9 @@ async def _alert_recipients(repository: HomecareRepository, patient_id: str) -> 
 def _cache_profile(context: ContextTypes.DEFAULT_TYPE, profile: dict[str, Any]) -> None:
     context.user_data["profile"] = profile
     context.user_data["patient_id"] = profile.get("id")
+    # El idioma guardado en el perfil manda, salvo que el paciente ya lo haya cambiado en esta sesión.
+    if profile.get("language") and not context.user_data.get("language"):
+        context.user_data["language"] = language_from_telegram(profile["language"])
 
 
 def _deps(context: ContextTypes.DEFAULT_TYPE) -> BotDependencies:
@@ -1174,7 +1293,7 @@ def _first_name(profile: dict[str, Any] | None) -> str:
 
 
 def _normalize_text(value: str) -> str:
-    normalized = unicodedata.normalize("NFD", value.strip().lower())
+    normalized = unicodedata.normalize("NFD", value.strip().lower().replace("’", "'"))
     return "".join(character for character in normalized if unicodedata.category(character) != "Mn")
 
 
@@ -1183,7 +1302,10 @@ def _contains_any(text: str, phrases: tuple[str, ...]) -> bool:
 
 
 def _is_greeting(text: str) -> bool:
-    return text in {"hola", "buenas", "buenos dias", "buenas tardes", "buenas noches", "hey", "holi"}
+    return text in {
+        "hola", "buenas", "buenos dias", "buenas tardes", "buenas noches", "hey", "holi",
+        "hello", "hi", "hi carmen", "hello carmen", "good morning", "good afternoon", "good evening",
+    }
 
 
 def _mentions_emergency(text: str) -> bool:
@@ -1203,6 +1325,28 @@ def _mentions_emergency(text: str) -> bool:
         "se me durmio un lado",
         "convulsion",
         "labios morados",
+        # inglés
+        "chest pain",
+        "tight chest",
+        "chest tightness",
+        "can't breathe",
+        "cant breathe",
+        "cannot breathe",
+        "short of breath",
+        "fainted",
+        "fainting",
+        "passed out",
+        "confused",
+        "face droop",
+        "drooping face",
+        "can't speak",
+        "cant speak",
+        "cannot speak",
+        "slurred",
+        "weakness on one side",
+        "numb on one side",
+        "seizure",
+        "blue lips",
     )
     return _contains_any(text, emergency_phrases)
 

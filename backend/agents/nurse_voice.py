@@ -9,6 +9,10 @@ colombiana, cálida, emojis con moderación). Guardas duras:
 - Si el nivel es crítico y la reescritura pierde la urgencia (123/urgencias)
   → borrador.
 - El LLM tiene prohibido cambiar cifras, nivel de riesgo o inventar datos.
+
+Idioma: el borrador siempre llega en español; si el payload trae `idioma` = "en",
+se añade una instrucción para que Carmen responda en inglés sin cambiar contenido.
+Las guardas de urgencia reconocen las palabras clave en ambos idiomas.
 """
 from __future__ import annotations
 
@@ -64,6 +68,28 @@ Responde SOLO con el mensaje reescrito, sin comillas ni explicaciones.
 """
 
 
+# Instrucción de idioma (se añade al final del prompt cuando el paciente no habla español).
+LANGUAGE_ADDENDA: dict[str, str] = {
+    "en": """
+IDIOMA DEL PACIENTE: INGLÉS.
+Este paciente eligió inglés. Ignora la instrucción de responder en español: escribe
+TODO tu mensaje en inglés natural, cálido y sencillo, sin mezclar español.
+- Conserva tu personalidad de abuela enfermera colombiana: puedes usar "mijito" o
+  "sweetie" como apodo cariñoso y el 👵 en saludos y mensajes tranquilos.
+- Traduce el borrador completo. Conserva intactos las cifras, los rangos, los formatos
+  de ejemplo (120/80, 36.8, el conteo de 30 segundos) y los comandos tal cual
+  (/vitales, /emergencia, /idioma).
+- Urgencia: "urgencias" es "the emergency room"; el número 123 se conserva ("call 123");
+  "tu médico" es "your doctor".
+- La opción 'no medí' se ofrece como "didn't measure".
+- Texto plano para Telegram: sin Markdown, sin asteriscos ni negritas.
+""",
+}
+
+URGENCY_WORDS = ("urgencias", "emergency")
+DOCTOR_WORDS = ("médico", "medico", "doctor", "physician")
+
+
 async def compose_patient_message(
     kind: str,
     payload: dict[str, Any],
@@ -74,11 +100,16 @@ async def compose_patient_message(
         return fallback
     try:
         openai_client = client or AsyncOpenAI(api_key=settings.openai_api_key)
-        system_prompt = NURSE_PROMPT_PATH.read_text(encoding="utf-8") + STYLE_ADDENDUM
+        language = str(payload.get("idioma") or "es")
+        system_prompt = (
+            NURSE_PROMPT_PATH.read_text(encoding="utf-8")
+            + STYLE_ADDENDUM
+            + LANGUAGE_ADDENDA.get(language, "")
+        )
         response = await openai_client.chat.completions.create(
-            model="gpt-4o",
-            temperature=0.6,
-            max_tokens=400,
+            model=settings.openai_model,
+            reasoning_effort=settings.openai_reasoning_effort,
+            max_completion_tokens=2000,  # incluye tokens de razonamiento
             messages=[
                 {"role": "system", "content": system_prompt},
                 {
@@ -90,7 +121,8 @@ async def compose_patient_message(
                 },
             ],
         )
-        text = (response.choices[0].message.content or "").strip()
+        # Telegram recibe texto plano (sin parse_mode): las negritas Markdown saldrían como asteriscos.
+        text = (response.choices[0].message.content or "").replace("**", "").strip()
         if not text:
             return fallback
         if _loses_urgency(payload, fallback, text):
@@ -116,17 +148,18 @@ async def extract_intake_answer(
     try:
         openai_client = client or AsyncOpenAI(api_key=settings.openai_api_key)
         response = await openai_client.chat.completions.create(
-            model="gpt-4o",
-            temperature=0,
-            max_tokens=15,
+            model=settings.openai_model,
+            reasoning_effort=settings.openai_reasoning_effort,
+            max_completion_tokens=500,  # incluye tokens de razonamiento
             messages=[
                 {
                     "role": "system",
                     "content": (
-                        "Un paciente responde una pregunta de signos vitales. Extrae el valor "
-                        "que reporta y responde SOLO con ese valor en el formato pedido "
+                        "Un paciente responde una pregunta de signos vitales, en español o en inglés. "
+                        "Extrae el valor que reporta y responde SOLO con ese valor en el formato pedido "
                         "(convierte números en palabras a cifras; usa punto decimal). "
-                        "Si dice que no midió o no tiene el aparato, responde exactamente: no medí. "
+                        "Si dice que no midió o no tiene el aparato, en cualquier idioma, "
+                        "responde exactamente: no medí. "
                         "Si la respuesta no contiene un valor claro, responde exactamente: NULO."
                     ),
                 },
@@ -150,8 +183,9 @@ async def extract_intake_answer(
 
 def _loses_urgency(payload: dict[str, Any], fallback: str, text: str) -> bool:
     risk_level = str(payload.get("risk_level") or "").lower()
+    lowered = text.lower()
     if risk_level == "critical" or payload.get("es_emergencia"):
-        return "123" not in text and "urgencias" not in text.lower()
+        return "123" not in text and not any(word in lowered for word in URGENCY_WORDS)
     if risk_level == "high":
-        return "médico" not in text.lower() and "medico" not in text.lower()
+        return not any(word in lowered for word in DOCTOR_WORDS)
     return False

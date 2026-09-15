@@ -65,8 +65,8 @@ class DoctorAgent:
             },
         }
         response = await client.chat.completions.create(
-            model="gpt-4o",
-            temperature=0.2,
+            model=settings.openai_model,
+            reasoning_effort=settings.openai_reasoning_effort,
             response_format={"type": "json_object"},
             messages=[
                 {"role": "system", "content": system_prompt},

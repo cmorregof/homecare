@@ -10,8 +10,8 @@ números, y qué sigue. Escrito como fuente de verdad tras el ciclo intensivo de
 
 **CARMEN** (HomecareCCV, proyecto Minciencias 56031, Universidad Nacional de Colombia —
 Manizales) es un sistema multiagente de monitoreo domiciliario y triage para pacientes
-cardio-cerebrovasculares en contextos de bajos recursos (foco territorial: Atlántico,
-Colombia). El paciente reporta signos vitales cada 6 horas por Telegram — sin app, con
+cardio-cerebrovasculares en contextos de bajos recursos (foco territorial: Caldas,
+Colombia; el proyecto cubre también Atlántico). El paciente reporta signos vitales cada 6 horas por Telegram — sin app, con
 un kit de ~COP 165.000 (~US$50) — y el sistema estratifica riesgo, pronostica deterioro,
 genera reporte clínico y alerta al médico asignado. **El clínico humano siempre decide.**
 
@@ -31,7 +31,7 @@ genera reporte clínico y alerta al médico asignado. **El clínico humano siemp
    pueden SUBIR el tier. "No model consulted: correct by construction."
 2. **Fallas ruidosas, degradación segura**: todo componente LLM/ML cae a un respaldo
    determinista auditado, con WARNING en logs. Nada falla en silencio.
-3. **LLM como interfaz**: GPT-4o redacta y escucha (voz "abuelita" colombiana, extracción
+3. **LLM como interfaz**: GPT-6 Astra (`gpt-6-astra` desde 2026-09-08; antes GPT-4o; sin `temperature`, `reasoning_effort=low`, configurable por `OPENAI_MODEL`) redacta y escucha (voz "abuelita" colombiana, extracción
    tolerante de respuestas libres), pero jamás valida rangos, cambia cifras ni decide tiers.
 4. **El pronóstico requiere verificación humana**: CARMEN-Forecast va solo al médico,
    etiquetado como preliminar, nunca al paciente.
@@ -41,7 +41,7 @@ genera reporte clínico y alerta al médico asignado. **El clínico humano siemp
 ## 2. Arquitectura desplegada
 
 **Flujo por reporte** (LangGraph): `validate_vitals → save_to_db → call_ml_script
-(+ hard overrides) → compute_forecast → call_doctor_agent (RAG + GPT-4o) →
+(+ hard overrides) → compute_forecast → call_doctor_agent (RAG + GPT-6 Astra) →
 check_alert → send_alerts → build_response (voz LLM)`.
 
 | Componente | Implementación | Estado |
@@ -50,11 +50,13 @@ check_alert → send_alerts → build_response (voz LLM)`.
 | Registro self-service | Frase natural → extrae nombre+documento → cuenta Supabase Auth + perfil → asigna médico (menos cargado, solo médicos con Telegram vinculado) → notifica al médico | ✅ producción |
 | Motor de riesgo | LightGBM 4 tiers + SHAP, en-proceso, con `apply_hard_overrides` encima (ambas rutas: modelo y fallback de reglas) | ✅ producción |
 | CARMEN-Forecast | TinyTemporalTransformer (d=96, 3 capas) servido en CPU; p(deterioro) a 6/12/24h sobre el historial bineado a 6h; alerta al médico si p(6h) ≥ 0.5 (`FORECAST_ALERT_THRESHOLD`) | ✅ producción |
-| Agente médico | GPT-4o + RAG (pgvector; fall-through léxico local), estructura de nota clínica CARMEN-I (Bloque B), NO DIAGNOSIS / NO PRESCRIPTION en prompts y verificado por tests | ✅ producción |
-| Voz de Carmen | GPT-4o reescribe borradores deterministas: abuela paisa ("¡Kiubo, mijito! 👵"), seria y protectora en crítico (guarda: si pierde urgencias/123 → plantilla dura) | ✅ producción |
+| Agente médico | GPT-6 Astra + RAG (pgvector; fall-through léxico local), estructura de nota clínica CARMEN-I (Bloque B), NO DIAGNOSIS / NO PRESCRIPTION en prompts y verificado por tests | ✅ producción |
+| Voz de Carmen | GPT-6 Astra reescribe borradores deterministas: abuela paisa ("¡Kiubo, mijito! 👵"), seria y protectora en crítico (guarda: si pierde urgencias/123 → plantilla dura) | ✅ producción |
+| Carmen bilingüe (es/en) | Solo la voz hacia el paciente (2026-09-08, demo París). Idioma = elección explícita > `profiles.language` > `language_code` de Telegram; saludo bilingüe con botones inline, `/idioma [es\|en]`. Textos deterministas en catálogo `bot/i18n.py`; borradores clínicos siguen en español y la voz los traduce (`idioma` en payload). Guardas de urgencia y validadores rápidos entienden ambos idiomas; emergencias en texto libre en inglés son deterministas. Médico, alertas al equipo, correos y dashboard siguen en español. Migración `20260908_add_profile_language.sql` (sin ella: idioma en memoria + WARNING). Limitación: si el LLM falla, las preguntas del intake caen al borrador en español | ✅ código; ⏳ migración en Supabase |
 | Alertas | high/critical → Telegram (paciente: humanizada; médico: clínica) + Resend email; registradas en `alerts` | ✅ verificado con teléfonos reales |
 | Base RAG | 16 extractos literales (pdftotext, sin LLM) con procedencia SHA256: MINSALUD GPC HTA 2013/2017/**2025**, ACV 2015 (+NIHSS), dislipidemias 2014 (Framingham Colombia ×0.75), lineamientos ECV 2026, NEWS2 (RCP), MEWS (CC BY) | ✅ commiteado |
 | Chat web del dashboard | Mismo pipeline que Telegram vía `POST /agents/chat` | ✅ |
+| Canal WhatsApp | Meta Cloud API: webhook `/whatsapp/webhook`, mismo intake de 11 campos y mismo pipeline (`source=whatsapp`), botones de respuesta; sesiones en memoria; sin plantillas ni recordatorios fuera de la ventana de 24 h | 🧪 rama `feat/whatsapp-channel`, no desplegado |
 | CI | GitHub Actions corre la suite completa en cada push/PR (torch CPU incluido) | ✅ verde |
 | Tests | **85** (78 backend + 7 forecast en proceso aparte por conflicto libomp en macOS) | ✅ |
 
@@ -159,7 +161,7 @@ todo en 72 horas. La distinción demo/sistema es esta.
 
 ## 6. Próximos pasos priorizados
 
-1. **Validación prospectiva silenciosa del Forecast en el piloto de Atlántico** — cada
+1. **Validación prospectiva silenciosa del Forecast en el piloto de Caldas** — cada
    reporte de 6h con su outcome genera el dataset domiciliario etiquetado que hoy no
    existe públicamente. El piloto ES el instrumento de datos.
 2. Evaluación de seguridad de las 100 viñetas (el sistema ya está listo para correrla).
@@ -168,6 +170,10 @@ todo en 72 horas. La distinción demo/sistema es esta.
 5. Calibración/reemplazo del tier model; decidir presentación de probabilidades al
    paciente.
 6. Rate-limiting del registro; auditoría RLS; licencia.
+7. **Canal WhatsApp (en curso, 2026-09-09)**: segundo canal sobre el mismo cerebro, en la
+   rama `feat/whatsapp-channel`, sin desplegar y sin migración aplicada. Motor de intake
+   independiente del canal (`backend/channels/intake.py`) y adaptador Meta Cloud API
+   (`backend/channels/whatsapp/`). Telegram no se toca. Runbook: `docs/canal_whatsapp.md`.
 
 ## 7. Ángulos de paper y venues candidatos
 

@@ -193,6 +193,13 @@ class DoctorOpenAIRequestTest(unittest.IsolatedAsyncioTestCase):
             {"vital_signs": {"heart_rate": 80}, "risk_level": "low"}, []
         )
         self.assertEqual(report["interpretation"], "i")
+        # Contrato GPT-6 Astra: modelo configurado, sin `temperature`, con esfuerzo de razonamiento.
+        from config import settings
+
+        self.assertEqual(fake.captured["model"], settings.openai_model)
+        self.assertEqual(fake.captured["reasoning_effort"], settings.openai_reasoning_effort)
+        self.assertNotIn("temperature", fake.captured)
+        self.assertNotIn("max_tokens", fake.captured)
         user_content = fake.captured["messages"][1]["content"]
         self.assertIn("JSON", user_content)
         self.assertEqual(fake.captured["response_format"], {"type": "json_object"})

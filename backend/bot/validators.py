@@ -13,6 +13,20 @@ OPTIONAL_SKIP_VALUES = {
     "n/a",
     "na",
     "ninguno",
+    # inglés
+    "didn't measure",
+    "didnt measure",
+    "did not measure",
+    "i didn't measure",
+    "i didnt measure",
+    "not measured",
+    "no measurement",
+    "don't have",
+    "dont have",
+    "don't have it",
+    "dont have it",
+    "none",
+    "skip",
 }
 
 
@@ -65,11 +79,17 @@ def parse_score(value: str, *, label: str) -> int:
 
 
 def is_affirmative(value: str) -> bool:
-    return _normalize(value) in {"si", "sí", "s", "claro", "listo", "ok", "dale"}
+    return _normalize(value) in {
+        "si", "sí", "s", "claro", "listo", "ok", "dale",
+        "yes", "yeah", "yep", "y", "sure", "ready",
+    }
 
 
 def is_negative(value: str) -> bool:
-    return _normalize(value) in {"no", "n", "despues", "después", "luego", "ahora no"}
+    return _normalize(value) in {
+        "no", "n", "despues", "después", "luego", "ahora no",
+        "nope", "later", "not now",
+    }
 
 
 def is_skip_value(value: str) -> bool:
@@ -96,4 +116,5 @@ def _int_if_whole(value: float) -> float | int:
 
 
 def _normalize(value: Any) -> str:
-    return str(value).strip().lower()
+    # iOS convierte el apóstrofo recto en curvo ("didn’t"): unificamos.
+    return str(value).strip().lower().replace("’", "'")

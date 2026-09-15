@@ -24,12 +24,24 @@ class Settings:
     api_port: int = _int_env("API_PORT", 8000)
 
     openai_api_key: str | None = os.getenv("OPENAI_API_KEY")
+    # GPT-6 Astra (2026-09-03). Es un modelo razonador: no acepta `temperature`/`top_p`
+    # y el presupuesto de salida (`max_completion_tokens`) incluye tokens de razonamiento.
+    openai_model: str = os.getenv("OPENAI_MODEL") or "gpt-6-astra"
+    openai_reasoning_effort: str = os.getenv("OPENAI_REASONING_EFFORT") or "low"
     supabase_url: str | None = os.getenv("SUPABASE_URL")
     supabase_service_key: str | None = os.getenv("SUPABASE_SERVICE_KEY")
     supabase_anon_key: str | None = os.getenv("SUPABASE_ANON_KEY")
 
     telegram_bot_token: str | None = os.getenv("TELEGRAM_BOT_TOKEN")
     telegram_webhook_url: str | None = os.getenv("TELEGRAM_WEBHOOK_URL")
+
+    # Canal WhatsApp (Meta Cloud API). Opcional: sin token y phone_number_id las rutas
+    # /whatsapp/* responden 503 y el resto del servicio (Telegram incluido) no cambia.
+    whatsapp_access_token: str | None = os.getenv("WHATSAPP_ACCESS_TOKEN")
+    whatsapp_phone_number_id: str | None = os.getenv("WHATSAPP_PHONE_NUMBER_ID")
+    whatsapp_verify_token: str | None = os.getenv("WHATSAPP_VERIFY_TOKEN")
+    whatsapp_app_secret: str | None = os.getenv("WHATSAPP_APP_SECRET")
+    whatsapp_api_version: str = os.getenv("WHATSAPP_API_VERSION") or "v25.0"
 
     resend_api_key: str | None = os.getenv("RESEND_API_KEY")
     from_email: str = os.getenv("FROM_EMAIL", "alertas@homecareccv.co")
