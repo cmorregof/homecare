@@ -100,16 +100,38 @@ intentarlo, está en [docs/play_store.md](../docs/play_store.md). Resumen: tal
 como está hoy la rechazarían, porque un WebView que envuelve una web sin aportar
 valor propio no pasa la política de funcionalidad mínima.
 
-Lo mínimo indispensable en cualquier caso:
+## Firma de release y App Bundle
 
-Lo de aquí está firmado con la clave de depuración, que sirve para instalar a
-mano pero Play Store no la acepta. Haría falta:
+La APK del enlace sigue firmada con la clave de depuración: sirve para instalar
+a mano y no cambia. En paralelo, el mismo workflow compila
+`bundleRelease`, el App Bundle (`.aab`) que Play Store exige, y lo firma con
+un keystore de subida que **no vive en el repositorio**: `app/build.gradle`
+lo lee de la variable `CARMEN_KEYSTORE_PATH`, y el workflow la rellena
+decodificando el secreto. Si el secreto no existe, el bundle sale sin firmar y
+no se publica; la APK de debug no se ve afectada.
 
-1. Generar un keystore de subida y guardarlo como secreto del repositorio
-2. Añadir `signingConfigs` a `android/app/build.gradle`
-3. Cambiar el workflow a `assembleRelease` (o `bundleRelease` para un AAB)
-4. Subir el `applicationId` `co.homecareccv.carmen`, que a partir de la primera
-   publicación ya no se puede cambiar
+El `versionCode` del bundle es el número de ejecución del workflow, porque
+Play Console rechaza subir un código que no sea mayor que el anterior.
 
-Y antes de eso, decidir si una carcasa sobre la web cumple las políticas de
-Play Store para aplicaciones de salud, que piden cierta funcionalidad nativa.
+### Generar el keystore (una sola vez, una persona)
+
+```bash
+keytool -genkeypair -v -keystore carmen-upload.jks -alias carmen \
+  -keyalg RSA -keysize 2048 -validity 10000
+```
+
+Guárdalo en **dos sitios** fuera del repositorio. Perderlo significa no poder
+actualizar nunca más la app publicada. Después, cuatro secretos del
+repositorio (Settings → Secrets and variables → Actions):
+
+| Secreto | Valor |
+|---|---|
+| `ANDROID_KEYSTORE_BASE64` | `base64 -i carmen-upload.jks` (una sola línea) |
+| `ANDROID_KEYSTORE_PASSWORD` | contraseña del keystore |
+| `ANDROID_KEY_ALIAS` | `carmen` |
+| `ANDROID_KEY_PASSWORD` | contraseña de la clave |
+
+El bundle firmado queda en el artifact **CARMEN-aab** de la ejecución del
+workflow; ese es el fichero que se sube a Play Console. El `applicationId`
+`co.homecareccv.carmen` no se puede cambiar a partir de la primera
+publicación.
