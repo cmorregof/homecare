@@ -95,6 +95,13 @@ workflow la renombra a `CARMEN.apk` antes de publicarla; en local no.
 
 ## Antes de publicarla en Play Store
 
+El plan completo, con los tres bloqueos reales y lo que hay que decidir antes de
+intentarlo, está en [docs/play_store.md](../docs/play_store.md). Resumen: tal
+como está hoy la rechazarían, porque un WebView que envuelve una web sin aportar
+valor propio no pasa la política de funcionalidad mínima.
+
+Lo mínimo indispensable en cualquier caso:
+
 Lo de aquí está firmado con la clave de depuración, que sirve para instalar a
 mano pero Play Store no la acepta. Haría falta:
 
