@@ -25,6 +25,9 @@ on:
 jobs:
   build-apk:
     runs-on: ubuntu-latest
+    permissions:
+      # Needed to publish the release the APK is downloaded from.
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -89,3 +92,44 @@ jobs:
         run: |
           sha="${{ github.event.pull_request.head.sha || github.sha }}"
           echo "**CARMEN.apk** compilada desde \`${sha:0:7}\`" >> "$GITHUB_STEP_SUMMARY"
+
+      # An Actions artifact is a zip behind the Actions UI and needs a GitHub
+      # login, which makes it useless for handing the app to someone on a phone.
+      # A release asset on a public repository is a plain URL that downloads the
+      # .apk directly, so Android can install it straight from the browser:
+      #
+      #   https://github.com/cmorregof/homecare/releases/download/android-latest/CARMEN.apk
+      #
+      # Not on pull requests: a proposed change should not replace the build
+      # people are installing.
+      - name: Publish the APK where a phone can reach it
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          sha="${{ github.sha }}"
+          apk=mobile/android/app/build/outputs/apk/debug/CARMEN.apk
+          notes=$(cat <<NOTES
+          APK instalable de CARMEN, compilada desde \`${sha:0:7}\`.
+
+          Descarga **CARMEN.apk** de aquí abajo en el teléfono y ábrela. Android
+          pedirá permitir la instalación desde orígenes desconocidos: es normal,
+          la app no viene de Play Store.
+
+          Abre la aplicación web en producción, así que necesita conexión y se
+          actualiza sola cuando se despliega un cambio. No hace falta reinstalar
+          nada salvo que cambie la propia carcasa.
+          NOTES
+          )
+          # Replace the asset in place rather than recreating the release, so the
+          # download URL people have already shared keeps working.
+          if gh release view android-latest >/dev/null 2>&1; then
+            gh release upload android-latest "$apk" --clobber
+            gh release edit android-latest --notes "$notes"
+          else
+            gh release create android-latest "$apk" \
+              --title "CARMEN para Android" \
+              --notes "$notes" \
+              --latest
+          fi

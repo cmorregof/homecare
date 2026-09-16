@@ -6,16 +6,20 @@ propio icono en el cajón de aplicaciones.
 
 ## Cómo conseguir la APK
 
-No hace falta instalar nada. La compila GitHub Actions:
+Enlace directo, que se puede abrir desde el propio teléfono:
 
-1. Pestaña **Actions** del repositorio → workflow **Android APK**
-2. **Run workflow** sobre `main` (o abre la última ejecución, si ya hay una)
-3. Cuando termine, en **Artifacts** hay un zip llamado **CARMEN**
-4. Descomprímelo: dentro está `CARMEN.apk`
+**https://github.com/cmorregof/homecare/releases/download/android-latest/CARMEN.apk**
 
-Para instalarla en un teléfono hay que permitir **instalar aplicaciones de
-orígenes desconocidos**, porque no viene de Play Store. Android lo pide solo al
-abrir el archivo.
+Descarga el `.apk` sin pasar por la interfaz de Actions y sin iniciar sesión en
+GitHub. La dirección no cambia: cada build sobre `main` reemplaza el fichero en
+esa misma release, así que un enlace ya compartido sigue sirviendo.
+
+Al abrirla, Android pide permitir **instalar aplicaciones de orígenes
+desconocidos**. Es normal: la aplicación no viene de Play Store.
+
+Para una build de una rama, que no toca la release: pestaña **Actions** →
+workflow **Android APK** → la ejecución → **Artifacts** → **CARMEN**. Eso sí
+baja un zip y requiere sesión iniciada.
 
 ## Qué es y qué no es
 
