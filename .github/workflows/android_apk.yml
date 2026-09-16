@@ -113,13 +113,29 @@ jobs:
           notes=$(cat <<NOTES
           APK instalable de CARMEN, compilada desde \`${sha:0:7}\`.
 
-          Descarga **CARMEN.apk** de aquí abajo en el teléfono y ábrela. Android
-          pedirá permitir la instalación desde orígenes desconocidos: es normal,
-          la app no viene de Play Store.
+          ## Instalación
 
-          Abre la aplicación web en producción, así que necesita conexión y se
-          actualiza sola cuando se despliega un cambio. No hace falta reinstalar
-          nada salvo que cambie la propia carcasa.
+          1. Descarga **CARMEN.apk** de aquí abajo, desde el propio teléfono.
+          2. Ábrela. Android pedirá permitir la instalación desde orígenes
+             desconocidos.
+          3. **Play Protect avisará de que la aplicación puede ser dañina.**
+             Es esperado. Toca «Instalar de todos modos».
+
+          ### Por qué sale ese aviso
+
+          La aplicación está firmada con la clave de depuración del SDK de
+          Android, que es la misma en todas las máquinas de desarrollo del
+          mundo, y no se distribuye por Play Store. Play Protect avisa por la
+          **procedencia, no por el contenido**: no analiza qué hace la
+          aplicación, solo ve que no viene de una fuente que reconozca.
+
+          Firmarla con una clave propia suaviza el aviso pero no lo quita. Lo
+          único que lo elimina del todo es publicarla en Play Store.
+
+          ## Qué necesita
+
+          Conexión a internet: abre la aplicación web en producción. Por eso se
+          actualiza sola cuando se despliega un cambio, sin reinstalar nada.
           NOTES
           )
           # Replace the asset in place rather than recreating the release, so the
