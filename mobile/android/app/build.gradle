@@ -7,8 +7,11 @@ android {
         applicationId "co.homecareccv.carmen"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        // Play Console rejects an upload whose versionCode is not higher than
+        // the last one it saw, so CI passes the workflow run number here. A
+        // local build keeps 1: it is never uploaded.
+        versionCode (project.hasProperty('versionCode') ? project.property('versionCode').toInteger() : 1)
+        versionName (project.hasProperty('versionName') ? project.property('versionName') : "1.0")
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,10 +19,31 @@ android {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    // The upload keystore lives outside the repository: CI decodes it from a
+    // secret into the path CARMEN_KEYSTORE_PATH points at. When that variable
+    // is absent (a local build, a pull request from a fork) the release build
+    // type simply has no signing config, so `bundleRelease` still compiles and
+    // produces an unsigned bundle instead of failing on a missing file. The
+    // workflow is what refuses to publish an unsigned bundle.
+    def keystorePath = System.getenv('CARMEN_KEYSTORE_PATH')
+    def hasReleaseKeystore = keystorePath != null && file(keystorePath).exists()
+    signingConfigs {
+        if (hasReleaseKeystore) {
+            release {
+                storeFile file(keystorePath)
+                storePassword System.getenv('CARMEN_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('CARMEN_KEY_ALIAS')
+                keyPassword System.getenv('CARMEN_KEY_PASSWORD')
+            }
+        }
+    }
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (hasReleaseKeystore) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 }

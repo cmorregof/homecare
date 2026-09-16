@@ -1,6 +1,7 @@
 name: Android APK
 
-# Builds the installable APK. It runs here rather than on a developer's machine
+# Builds the installable APK and, when the upload keystore is available, the
+# signed App Bundle for Play Store. The APK It runs here rather than on a developer's machine
 # because the Android SDK is preinstalled on GitHub's runners, so nobody needs a
 # local Android Studio to produce a build the team can hand out.
 #
@@ -64,12 +65,60 @@ jobs:
         run: npx cap sync android
 
       # Debug signing, on purpose. A debug APK installs by sideloading, which is
-      # how this one is distributed. A release build would need an upload
-      # keystore held as a repository secret; see mobile/README.md for what that
-      # would involve, and do it before any store submission.
+      # how this one is distributed, and the download link people already have
+      # must keep working. The Play Store build is the separate AAB below.
       - name: Build the debug APK
         working-directory: mobile/android
         run: ./gradlew assembleDebug --no-daemon --stacktrace
+
+      # The upload keystore is a repository secret, base64-encoded because a
+      # secret is text. It lands in the runner's temp dir, never in the tree.
+      # The step is skipped, not failed, when the secret is absent: a pull
+      # request from a fork sees no secrets and still has to build.
+      - name: Restore the upload keystore
+        if: env.KEYSTORE_BASE64 != ''
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          keystore="$RUNNER_TEMP/carmen-upload.jks"
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$keystore"
+          echo "CARMEN_KEYSTORE_PATH=$keystore" >> "$GITHUB_ENV"
+
+      # Play Store takes an App Bundle, not an APK, and signed with a key that
+      # is not the SDK's debug key. Without the keystore Gradle emits an
+      # unsigned bundle, which proves the release build type compiles on every
+      # pull request; the check right after refuses to hand out that file.
+      - name: Build the release App Bundle
+        working-directory: mobile/android
+        env:
+          CARMEN_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          CARMEN_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          CARMEN_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          ./gradlew bundleRelease --no-daemon --stacktrace \
+            -PversionCode="${{ github.run_number }}" \
+            -PversionName="1.0.${{ github.run_number }}"
+
+      # An unsigned AAB looks like a valid file until Play Console rejects it.
+      # Verify the signature here so the failure is in the log, not in a
+      # browser two weeks later. jarsigner ships with the JDK setup-java gave us.
+      - name: Check the App Bundle is signed with the upload key
+        if: env.CARMEN_KEYSTORE_PATH != ''
+        working-directory: mobile/android/app/build/outputs/bundle/release
+        run: |
+          set -euo pipefail
+          jarsigner -verify -strict app-release.aab
+          mv app-release.aab CARMEN.aab
+
+      - name: Keep the signed App Bundle as a build artifact
+        if: env.CARMEN_KEYSTORE_PATH != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: CARMEN-aab
+          path: mobile/android/app/build/outputs/bundle/release/CARMEN.aab
+          if-no-files-found: error
+          retention-days: 90
 
       # Gradle names its output app-debug.apk. That is the file a person ends up
       # with on their phone, so it gets the product's name instead.
@@ -92,6 +141,11 @@ jobs:
         run: |
           sha="${{ github.event.pull_request.head.sha || github.sha }}"
           echo "**CARMEN.apk** compilada desde \`${sha:0:7}\`" >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "${CARMEN_KEYSTORE_PATH:-}" ]; then
+            echo "**CARMEN.aab** firmada con la clave de subida, versionCode ${{ github.run_number }}, en el artifact \`CARMEN-aab\`" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Sin App Bundle firmado: el secreto \`ANDROID_KEYSTORE_BASE64\` no está disponible en esta ejecución" >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       # An Actions artifact is a zip behind the Actions UI and needs a GitHub
       # login, which makes it useless for handing the app to someone on a phone.
